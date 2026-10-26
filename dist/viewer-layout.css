@@ -1,0 +1,53 @@
+/* Viewer-first layout: import belongs to each image panel, settings live below. */
+.app-header{height:46px;justify-content:flex-end;padding:0 30px}
+.header-right{margin-left:auto}
+.app-shell{display:flex;flex-direction:column;min-height:calc(100vh - 78px)}
+.app-shell>main{order:1;width:100%;max-width:1800px;margin:0 auto}
+.app-shell>.sidebar{order:2;width:100%;max-width:1800px;margin:0 auto;border-right:0;border-top:1px solid var(--border);background:#15181b;padding:22px 34px 26px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 30px}
+.sidebar-heading,.sidebar-bottom{grid-column:1/-1}
+.sidebar .workflow-section{margin:0;min-width:0;padding:0 0 16px;border-bottom:0}
+.sidebar .workflow-section:first-of-type{display:block;grid-column:auto;margin:0;padding:0 0 16px}
+.sidebar .workflow-section:first-of-type h2{margin-bottom:15px}
+.sidebar .workflow-section select,.sidebar .workflow-section input[type=number]{max-width:100%}
+.viewers{grid-template-columns:repeat(3,minmax(0,1fr))}
+.upload-viewport{min-width:0}
+.upload-viewport.drag{outline:2px dashed var(--accent);outline-offset:-3px;background:#213a33}
+.upload-viewport:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.upload-viewport .viewport-title{gap:8px;padding:0 11px;height:51px}
+.viewport-title .loaded-dot{flex:none}
+.viewport-pickers{display:flex;gap:5px;margin-left:auto;min-width:0;flex:none}
+.viewport-pickers button{display:flex;align-items:center;justify-content:center;gap:5px;background:#252d31;border:1px solid #3b484a;border-radius:5px;color:#d8e4e2;font-size:10px;padding:6px 8px;white-space:nowrap}
+.viewport-pickers button:hover{border-color:var(--accent);color:var(--accent)}
+.viewport-pickers svg{width:13px;height:13px;flex:none}
+.series-summary{height:31px;padding:5px 11px;background:#171d21;display:flex;align-items:center;gap:7px;min-width:0;border-bottom:1px solid #2d353b;font-size:10px}
+.series-summary strong{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b8d1cd}
+.series-summary span{color:#788a94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.canvas-wrap{height:clamp(300px,34vw,560px)}
+.canvas-wrap.reveal-active{cursor:crosshair}
+.reveal-controls{display:grid;grid-template-columns:auto minmax(60px,1fr);align-items:center;gap:4px 9px;padding:9px 12px;background:#1a1f23;border-top:1px solid #2d353b;font-size:10px;color:#b9c7ca}
+.reveal-controls[hidden]{display:none}
+.reveal-controls label{white-space:nowrap}
+.reveal-controls output{color:var(--accent)}
+.reveal-controls input{accent-color:var(--accent);width:100%}
+.reveal-controls>span{grid-column:1/-1;color:#81929c;font-size:9px}
+@media(max-width:1050px){
+ .viewers{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .result-viewport{grid-column:1/-1}
+ .canvas-wrap{height:clamp(280px,40vw,440px)}
+ .result-viewport .canvas-wrap{height:clamp(300px,43vw,470px)}
+ .app-shell>.sidebar{padding:22px 24px 28px}
+}
+@media(max-width:700px){
+ .app-shell>.sidebar{display:block;padding:20px 16px 28px}
+ .sidebar .workflow-section,.sidebar .workflow-section:first-of-type{display:block;padding:0 0 19px;margin:0 0 18px;border-bottom:1px solid var(--border)}
+ .sidebar-heading,.sidebar-bottom{margin-bottom:18px}
+ .viewers{grid-template-columns:1fr}
+ .result-viewport{grid-column:auto}
+ .canvas-wrap,.result-viewport .canvas-wrap{height:clamp(270px,65vw,430px)}
+ .viewport-title .viewport-subtitle{display:none}
+ .series-summary span{display:none}
+}
+@media(max-width:400px){
+ .viewport-pickers button span{display:none}
+ .viewport-pickers button{width:32px;height:30px;padding:5px}
+}
