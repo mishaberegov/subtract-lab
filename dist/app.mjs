@@ -4,10 +4,23 @@ import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane} from './manual-alignment.mjs';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-l10n';
 const $=id=>document.getElementById(id);
+const language=languageFromUrl(location.href);
+localizeDocument(document,language);
+for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl(location.href,lang);if(lang===language)$(id).setAttribute('aria-current','page');}
+// Only application-owned output is translated; patient series names and DICOM metadata stay intact.
+const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','metaA','metaB','infoR','grayNote','scanSummary','workspaceStatus','registrationReport','positionLabel','gainLabel','warningNotice','nameA','nameB','registerBtn','exportNifti']);
+const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.id.startsWith('name')&&!/^(Чтение файлов|Чтение DICOM|Сборка объёма|Перетащи DICOM)/.test(node.nodeValue))continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
+uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
+for(const [id,lang] of [['langEn','en'],['langRu','ru']])$(id).addEventListener('click',event=>{
+  if(lang===language){event.preventDefault();return;}
+  const unsaved=!!(state.loading.size||(state.a&&!state.a?.synthetic)||(state.b&&!state.b?.synthetic)||state.registration||state.params.some(x=>x!==0));
+  if(unsaved&&!confirm(language==='ru'?'Смена языка перезагрузит страницу и удалит загруженные серии и несохранённое совмещение. Продолжить?':'Switching language reloads the page and clears loaded series and unsaved alignment. Continue?'))event.preventDefault();
+});
 let toastTimer,renderFrame,pickSlot='a',activeScan=null,niftiUrl=null;
-const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString('ru-RU'):'—';
+const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString(language==='ru'?'ru-RU':'en-US'):'—';
 function toast(message,error=false){$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,error?16000:6000);}
 function regStatus(text,type=''){const e=$('regStatus');e.replaceChildren();const dot=document.createElement('span');dot.className='status-dot '+type;const label=document.createElement('span');label.textContent=text;e.append(dot,label);}
 function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('rotateLeft').disabled=$('rotateRight').disabled=!ready||loading||!$('manualMode').checked||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
@@ -70,12 +83,12 @@ function updateWarnings(){
   $('warningNotice').hidden=!warnings.length;$('warningNotice').textContent=[...new Set(warnings)].join(' ');
 }
 function setVolume(slot,volume){
-  state[slot]=volume;state.demo=!!(state.a?.synthetic&&state.b?.synthetic);$('demoNotice').hidden=!state.demo;
+  state[slot]=volume;state.demo=!!(state.a?.synthetic&&state.b?.synthetic);$('demoMarker').hidden=$('clearBtn').hidden=!state.demo;
   state.plane=sourcePlane(state.a||state.b);
   document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b.dataset.plane===state.plane));
   state.windows[slot]={...volume.window};const up=slot.toUpperCase();
   $('wl'+up).value=Number(volume.window.level.toFixed(2));$('ww'+up).value=Number(volume.window.width.toFixed(2));
-  $('name'+up).textContent=volume.name;$('meta'+up).textContent=volume.modality+' · '+volume.dims.join(' × ')+' · '+(volume.synthetic?'синтетический':'DICOM');$('dot'+up).classList.add('loaded');$('label'+up).textContent=volume.modality+' · '+volume.dims[2]+' срезов';
+  $('name'+up).textContent=volume.synthetic?localizeMessage(volume.name,language):volume.name;$('meta'+up).textContent=volume.modality+' · '+volume.dims.join(' × ')+' · '+(volume.synthetic?'синтетический':'DICOM');$('dot'+up).classList.add('loaded');$('label'+up).textContent=volume.modality+' · '+volume.dims[2]+' срезов';
   resetRegistration();resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
   $('workspaceStatus').textContent=state.a&&state.b?'Обе серии загружены · готово к совмещению':'Загружена серия '+up;$('readyDot').className='status-dot '+(state.a&&state.b?'success':'');
@@ -185,7 +198,7 @@ function startRegistration(){
     if(data.type==='progress'){$('regProgress').firstElementChild.style.width=Math.max(2,Math.round(data.fraction*100))+'%';regStatus('Уровень '+data.level+' / '+data.levels+' · '+Math.round(data.fraction*100)+'%');}
     if(data.type==='done'){
       state.params=data.result.params;state.registration=data.result;stopRegistration(false);scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
-      regStatus('Завершено · '+format(r.elapsedMs/1000,1)+' с',good?'success':'warning');
+      regStatus('Завершено · '+format(r.elapsedMs/1000,1)+(language==='ru'?' с':' s'),good?'success':'warning');
       $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выборки '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+(good?'Проверь границы в режиме «Форточка».':'Совмещение требует визуальной проверки; при необходимости уточни вручную.');
       $('workspaceStatus').textContent='Корегистрация выполнена · результат в сетке A';requestRender();
     }
@@ -196,13 +209,13 @@ function startRegistration(){
 }
 function stopRegistration(announce=true){state.regWorker?.terminate();state.regWorker=null;$('registerBtn').classList.remove('running');$('registerBtn').innerHTML='<svg><use href="#i-cross"/></svg>Корегистрировать';$('regProgress').hidden=true;if(announce)regStatus('Остановлено · прежнее преобразование сохранено','warning');updateButtons();}
 function demo(){
-  clearAll(false);const pair=makeDemo();setVolume('a',pair.a);setVolume('b',pair.b);state.demo=true;$('demoNotice').hidden=false;state.slice=Math.round(pair.a.dims[2]/2+1);configureSlice();requestRender();regStatus('Фантом смещён · запусти корегистрацию','warning');
+  clearAll(false);const pair=makeDemo();setVolume('a',pair.a);setVolume('b',pair.b);state.demo=true;$('demoMarker').hidden=$('clearBtn').hidden=false;state.slice=Math.round(pair.a.dims[2]/2+1);configureSlice();requestRender();regStatus('Фантом смещён · запусти корегистрацию','warning');
 }
 function clearAll(announce=true){
   cancelManualMode();
   stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;
   for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
-  $('demoNotice').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('workspaceStatus').textContent='Готов к загрузке';$('readyDot').className='status-dot';$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
+  $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('workspaceStatus').textContent='Готов к загрузке';$('readyDot').className='status-dot';$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }
 function saveBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
@@ -245,7 +258,7 @@ $('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state
 for(const [id,degrees] of [['rotateLeft',-1],['rotateRight',1]])$(id).addEventListener('click',()=>{if(!$('manualMode').checked||!(state.a&&state.b))return;state.params=rotateInPlane(state.params,planeInfo(state.a),degrees);invalidateRegistration();scheduleResampling();requestRender();});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();}));
-function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':Number($('resultGain').value).toFixed(1)+'×';}
+function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':format(Number($('resultGain').value),1)+'×';}
 document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='blend'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Доля B в наложении':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
 for(const id of ['sign','weight','palette','rawScale','resultGain','subtractionMode'])$(id).addEventListener('input',()=>{$('rawScale').disabled=$('subtractionMode').value!=='raw';updateGain();requestRender();});

@@ -4,7 +4,7 @@ Browser-local prototype for loading two DICOM volumes, rigid registration, indep
 
 ## Run
 
-Serve `dist/` from an HTTP server. ES modules and workers do not work reliably over `file://`. There is no build step. `npm ci` installs development dependencies; `npm test` runs the computational and DICOM tests. Static vendored assets are committed for deployment.
+Serve `dist/` from an HTTP server. ES modules and workers do not work reliably over `file://`. There is no build step. `npm ci` installs development dependencies; `npm test` runs the computational and DICOM tests. Static vendored assets are committed for deployment. The interface defaults to English; append `?lang=ru` for Russian or use the EN/RU links. Changing language reloads the page, so save or export your work first; loaded real series and non-default alignment trigger a confirmation. The demo is labelled as synthetic data.
 
 ## Behavior
 

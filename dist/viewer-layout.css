@@ -74,3 +74,18 @@
 .geometry-strip strong{font-size:12px}
 .geometry-strip span,.geometry-strip p{font-size:10px}
 @media(max-width:1450px){.upload-viewport .viewport-title .viewport-subtitle{display:none}}
+.app-header{justify-content:space-between;gap:12px;min-height:46px;height:auto;padding:8px 30px}
+.app-header h1{font-size:16px;line-height:1.2;margin:0;min-width:0}
+.header-right{display:flex;align-items:center;gap:12px;flex:none}
+.language-switch{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+.language-switch a{color:#a9c0c1;text-decoration:none;padding:4px;border-radius:3px}
+.language-switch a[aria-current="page"]{color:var(--accent);font-weight:700}
+.language-switch a:focus-visible{outline:2px solid var(--accent)}
+.viewer-toolbar #demoBtn{font-size:11px;padding:7px 10px}
+.demo-marker{display:inline-flex;align-items:center;flex:none;color:#55dec3;font-size:10px;font-weight:700;white-space:nowrap}
+.demo-marker[hidden],.demo-clear[hidden]{display:none}
+.series-summary .demo-clear{flex:none;min-width:auto;padding:2px 4px;font-size:10px}
+@media(max-width:700px){.app-header{padding:8px 14px}.app-header h1{font-size:14px}.header-right{gap:7px}.local-badge{display:none}.viewer-toolbar #demoBtn{font-size:0;padding:8px}.viewer-toolbar #demoBtn svg{width:16px;height:16px}.series-summary .demo-marker{font-size:9px}.series-summary .demo-clear{font-size:9px}}
+@media(max-width:400px){.app-header h1{font-size:12px}.language-switch{font-size:11px}}
+.series-summary .demo-marker{display:inline-flex}
+.series-summary .demo-marker[hidden]{display:none}

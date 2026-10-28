@@ -22,6 +22,6 @@ test('image viewers use full workspace width rather than a fixed left sidebar',(
 
 test('main heading is direct, without brand slogan or trailing dot',()=>{
   assert.doesNotMatch(html,/class="brand"|РАЗНИЦА СТАНОВИТСЯ ВИДНОЙ/);
-  assert.match(html,/<h1>Корегистрация и вычитание<\/h1>/);
+  assert.match(html,/<header class="app-header">[\s\S]*?<h1>Корегистрация и вычитание<\/h1>/);
   assert.doesNotMatch(html,/Две серии\. Одна система координат\. Независимые окна\./);
 });
