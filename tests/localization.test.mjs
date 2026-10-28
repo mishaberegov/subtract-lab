@@ -51,7 +51,8 @@ test('every Russian static text and accessible attribute has an English counterp
 test('demo names and geometry use localized labels and units without translating real series names',()=>{
   assert.equal(translate('Фантом · до','en'),'Phantom · before');
   assert.equal(translate('Фантом · после','en'),'Phantom · after');
-  assert.match(app,/volume\.synthetic\?localizeMessage\(volume\.name,language\):volume\.name/);
+  assert.match(app,/label\.textContent=volume\.synthetic\?'':volume\.name/);
+  assert.match(app,/root\.dataset\.patientName==='true'/);
   assert.match(app,/['"]gridA['"],['"]gridB['"],['"]gridTarget['"]/);
 });
 test('gain readout uses selected numeric locale rather than a fixed decimal point',()=>{

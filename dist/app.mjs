@@ -11,8 +11,8 @@ const language=languageFromUrl(location.href);
 localizeDocument(document,language);
 for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl(location.href,lang);if(lang===language)$(id).setAttribute('aria-current','page');}
 // Only application-owned output is translated; patient series names and DICOM metadata stay intact.
-const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','metaA','metaB','grayNote','scanSummary','registrationReport','positionLabel','gainLabel','warningNotice','nameA','nameB','registerBtn','exportNifti']);
-const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.id.startsWith('name')&&!/^(Чтение файлов|Чтение DICOM|Сборка объёма|Перетащи DICOM)/.test(node.nodeValue))continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
+const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','grayNote','scanSummary','registrationReport','positionLabel','gainLabel','warningNotice','registerBtn','exportNifti']);
+const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.dataset.patientName==='true')continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
 uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
 for(const [id,lang] of [['langEn','en'],['langRu','ru']])$(id).addEventListener('click',event=>{
@@ -36,7 +36,6 @@ function updateGridInfo(){
   if(both){
     $('gridTarget').textContent=gridSpacing(state.a).map(x=>format(x,2)).join(' × ')+' мм';
     $('gridTargetMeta').textContent=state.a.dims.join(' × ')+' · '+(state.bOnA?'готово':'рассчитывается');
-    $('labelB').textContent=state.bOnA?'Сетка A · '+state.a.dims[2]+' срезов':'Предпросмотр B → A';
     const source=gridSpacing(state.b),target=gridSpacing(state.a);
     $('resolutionNote').hidden=!source.some((s,i)=>s>target[i]*1.1);
   }
@@ -90,7 +89,7 @@ function setVolume(slot,volume){
   document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b.dataset.plane===state.plane));
   state.windows[slot]={...volume.window};const up=slot.toUpperCase();
   $('wl'+up).value=Number(volume.window.level.toFixed(2));$('ww'+up).value=Number(volume.window.width.toFixed(2));
-  $('name'+up).textContent=volume.synthetic?localizeMessage(volume.name,language):volume.name;$('meta'+up).textContent=volume.modality+' · '+volume.dims.join(' × ')+' · '+(volume.synthetic?'синтетический':'DICOM');$('dot'+up).classList.add('loaded');$('label'+up).textContent=volume.modality+' · '+volume.dims[2]+' срезов';
+  const label=$('label'+up);label.dataset.patientName=volume.synthetic?'false':'true';label.textContent=volume.synthetic?'':volume.name;label.title=volume.synthetic?'':volume.name;$('dot'+up).classList.add('loaded');
   resetRegistration('volume');resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
 
@@ -166,9 +165,9 @@ function render(){
 function loadFiles(slot,files){
   if(!files.length)return;if(state.a?.synthetic||state.b?.synthetic)clearAll(false);if(state.regWorker)stopRegistration(false);
   state.loadWorkers[slot]?.terminate();const worker=new Worker('./io-worker.js?v=1.1.0');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
-  const up=slot.toUpperCase();$('name'+up).textContent='Чтение файлов…';$('meta'+up).textContent=files.length+' файлов';
+  const up=slot.toUpperCase();$('label'+up).dataset.patientName='false';$('label'+up).title='';$('label'+up).textContent='Чтение файлов…';
   worker.onmessage=({data})=>{
-    if(data.type==='progress'){$('name'+up).textContent=data.text+' · '+Math.round(data.fraction*100)+'%';}
+    if(data.type==='progress'){$('label'+up).textContent=data.text+' · '+Math.round(data.fraction*100)+'%';}
     if(data.type==='groups'){
       const choose=key=>{worker.postMessage({type:'build',key});};
       if(data.skipped)toast('Пропущено файлов: '+data.skipped+'. '+(data.errors[0]||'Объекты без PixelData.'));
@@ -188,7 +187,7 @@ function loadFiles(slot,files){
   worker.onerror=e=>finishError('Ошибка чтения DICOM: '+(e.message||'проверь формат файлов.'));
   worker.postMessage({type:'scan',slot,files:Array.from(files)});
 }
-function restoreSlotLabel(slot){const v=state[slot],up=slot.toUpperCase();$('name'+up).textContent=v?.name||'Перетащи DICOM сюда';$('meta'+up).textContent=v?v.modality+' · '+v.dims.join(' × '):'Папка, файлы или ZIP-архив';}
+function restoreSlotLabel(slot){const v=state[slot],label=$('label'+slot.toUpperCase());label.dataset.patientName=v&&!v.synthetic?'true':'false';label.textContent=v?(v.synthetic?'':v.name):'Не загружен';label.title=v&&!v.synthetic?v.name:'';}
 function cancelScan(){if(activeScan){const slot=activeScan.slot;state.loadWorkers[slot]?.terminate();delete state.loadWorkers[slot];state.loading.delete(slot);restoreSlotLabel(slot);activeScan=null;updateButtons();}if($('seriesDialog').open)$('seriesDialog').close();}
 function startRegistration(){
   if(state.regWorker){stopRegistration();return;}if(!(state.a&&state.b))return;
