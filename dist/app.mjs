@@ -4,9 +4,9 @@ import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
-import {hotColor,fusionAlpha,composeFusion} from './fusion.mjs';
+import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-fusion1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-boojum1';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
@@ -157,7 +157,7 @@ function render(){
     if(state.display==='blend'){
       const rgb=composeFusion(wa,wb,fusionOpacity,fusionThreshold,variableAlpha);
       d[i]=rgb[0];d[i+1]=rgb[1];d[i+2]=rgb[2];
-      const color=hotColor(wb),overlay=images.fusion.data,alpha=fusionAlpha(wb,fusionOpacity,fusionThreshold,variableAlpha);
+      const color=fusionColor(wb),overlay=images.fusion.data,alpha=fusionAlpha(wb,fusionOpacity,fusionThreshold,variableAlpha);
       overlay[i]=color[0];overlay[i+1]=color[1];overlay[i+2]=color[2];overlay[i+3]=Math.round(alpha*255);
     }else{
       const delta=sign*difference(av,bv,state.windows.a,state.windows.b,raw,weight),t=clamp(delta/(raw?scale:1)*gain,-1,1);
