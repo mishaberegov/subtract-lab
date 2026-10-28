@@ -38,6 +38,8 @@ test('title shares header row, and demo has a compact marker near series instead
   assert.match(html,/<div class="viewer-toolbar">[\s\S]*?id="demoBtn"/);
   assert.doesNotMatch(html,/class="notice demo-notice"/);
   assert.match(html,/id="demoMarker"/);
+  assert.match(html,/id="demoMarker"[^>]*title="Синтетические данные"[^>]*>Демо<\/span>/);
+  assert.equal(staticEnglish('Синтетические данные'),'Synthetic data');
   assert.match(html,/id="clearBtn"/);
   assert.match(readFileSync(new URL('../dist/viewer-layout.css',import.meta.url),'utf8'),/\.language-switch/);
 });

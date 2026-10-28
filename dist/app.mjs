@@ -4,7 +4,7 @@ import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane} from './manual-alignment.mjs';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-l10n';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-l10n2';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
