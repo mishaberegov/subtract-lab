@@ -7,7 +7,7 @@ export const copy={
 };
 Object.assign(copy,{
 'пока не поддерживается. Экспортируй DICOM без сжатия.':'is not supported yet. Export uncompressed DICOM.',
-'Демо · синтетические данные':'Demo · synthetic data','Корегистрация пока не выполнялась':'Registration has not been run','Корегистрация завершена':'Registration complete','Параметры изменены, перезапусти корегистрацию':'Settings changed — rerun registration','Серия B смещена вручную':'Series B moved manually','Демо':'Demo','Синтетические данные':'Synthetic data',
+'Демо · синтетические данные':'Demo · synthetic data','Корегистрация пока не выполнялась':'Registration has not been run','Корегистрация завершена':'Registration complete','Корегистрация с текущими параметрами не выполнялась. Нажми «Корегистрировать»':'Registration has not been run with the current settings. Select Register','Серия B смещена вручную':'Series B moved manually','Демо':'Demo','Синтетические данные':'Synthetic data',
 'Фантом · до':'Phantom · before','Фантом · после':'Phantom · after',
 'Кнопка сброса возвращает масштаб к 1×.':'Reset zoom returns to 1×.',
 'Колесо / ↑↓ — срезы; протяжка мышью в A или B — окно (по горизонтали WW, по вертикали WL); Shift + протяжка — масштаб. Плоскости следуют осям референса; ориентационные метки учитывают DICOM. Кнопка сброса возвращает масштаб к 1×.':'Wheel / ↑↓ — slices; drag in A or B — window (horizontal WW, vertical WL); Shift + drag — zoom. Planes follow reference axes; orientation labels use DICOM. Reset zoom returns to 1×.',

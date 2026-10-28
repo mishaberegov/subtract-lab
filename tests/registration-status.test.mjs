@@ -10,7 +10,7 @@ test('initial or replaced series have not been registered',()=>{
 });
 test('successful registration stays complete until its parameters change',()=>{
   assert.equal(registrationStatusText(nextRegistrationState('not-run','success')),'Корегистрация завершена');
-  assert.equal(registrationStatusText(nextRegistrationState('complete','metric')),'Параметры изменены, перезапусти корегистрацию');
+  assert.equal(registrationStatusText(nextRegistrationState('complete','metric')),'Корегистрация с текущими параметрами не выполнялась. Нажми «Корегистрировать»');
   assert.equal(nextRegistrationState('stale','success'),'complete');
 });
 test('manual translation and rotation are identified independently',()=>{
