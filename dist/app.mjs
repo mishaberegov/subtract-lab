@@ -3,13 +3,14 @@ import {gridSpacing} from './resampling.mjs';
 import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
+import {dragTranslation,rotateInPlane} from './manual-alignment.mjs';
 const $=id=>document.getElementById(id);
-const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
+const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
 let toastTimer,renderFrame,pickSlot='a',activeScan=null,niftiUrl=null;
 const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString('ru-RU'):'—';
 function toast(message,error=false){$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,error?16000:6000);}
 function regStatus(text,type=''){const e=$('regStatus');e.replaceChildren();const dot=document.createElement('span');dot.className='status-dot '+type;const label=document.createElement('span');label.textContent=text;e.append(dot,label);}
-function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy; $('registerBtn').disabled=!both||loading;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
+function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('rotateLeft').disabled=$('rotateRight').disabled=!ready||loading||!$('manualMode').checked||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
 function updateGridInfo(){
   const both=!!(state.a&&state.b);$('geometryStrip').hidden=!both;
   for(const slot of ['a','b']){
@@ -55,10 +56,11 @@ function scheduleResampling(delay=0){
 function invalidateRegistration(label='Совмещение изменено вручную'){
   state.registration=null;$('registrationReport').hidden=true;regStatus(label,'warning');
 }
-function updateParams(){state.params.forEach((v,i)=>$('p'+i).value=Number(v.toFixed(3)));}
+function cancelManualMode(){state.manualDragging=false;$('manualMode').checked=false;canvases.r.parentElement.classList.remove('manual-active');updateButtons();}
 function resetRegistration(){
+  cancelManualMode();
   if(state.regWorker)stopRegistration(false);
-  state.params=[0,0,0,0,0,0];state.registration=null;updateParams();$('registrationReport').hidden=true;
+  state.params=[0,0,0,0,0,0];state.registration=null;$('registrationReport').hidden=true;
   regStatus(state.a&&state.b?'По координатам DICOM · не уточнено':'Сначала загрузи две серии',state.a&&state.b?'warning':'');
   scheduleResampling();
 }
@@ -88,7 +90,19 @@ function planeInfo(v){
 }
 function orientationLabel(direction){const names=[['R','L'],['A','P'],['I','S']];return direction.map((v,i)=>({v:Math.abs(v),s:names[i][v>=0?1:0]})).filter(o=>o.v>Math.max(...direction.map(Math.abs))*.2).sort((a,b)=>b.v-a.v).map(o=>o.s).join('');}
 const canvases={a:$('canvasA'),b:$('canvasB'),r:$('canvasR')},offscreen={};
+let manualFrame=0,previewShift={x:0,y:0};
 for(const key of ['a','b','r'])offscreen[key]=document.createElement('canvas');
+function renderManualPreview(){
+  manualFrame=0;
+  if(!state.manualDragging||!state.bOnA)return;
+  const canvas=canvases.r,ctx=canvas.getContext('2d'),bounds=imageBounds(canvas,planeInfo(state.a),state.zoom);
+  ctx.fillStyle='#090909';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.save();ctx.beginPath();ctx.rect(bounds.x,bounds.y,bounds.w,bounds.h);ctx.clip();
+  ctx.imageSmoothingEnabled=true;ctx.drawImage(offscreen.a,bounds.x,bounds.y,bounds.w,bounds.h);
+  ctx.globalAlpha=clamp(Number($('resultGain').value)/4,0,1);
+  ctx.drawImage(offscreen.b,bounds.x+previewShift.x,bounds.y+previewShift.y,bounds.w,bounds.h);
+  ctx.restore();
+}
 function render(){
   const base=state.a||state.b;
   for(const key of ['a','b','r']){
@@ -164,12 +178,13 @@ function restoreSlotLabel(slot){const v=state[slot],up=slot.toUpperCase();$('nam
 function cancelScan(){if(activeScan){const slot=activeScan.slot;state.loadWorkers[slot]?.terminate();delete state.loadWorkers[slot];state.loading.delete(slot);restoreSlotLabel(slot);activeScan=null;updateButtons();}if($('seriesDialog').open)$('seriesDialog').close();}
 function startRegistration(){
   if(state.regWorker){stopRegistration();return;}if(!(state.a&&state.b))return;
+  cancelManualMode();
   const worker=new Worker('./register-worker.mjs',{type:'module'});state.regWorker=worker;
   $('registerBtn').classList.add('running');$('registerBtn').textContent='Остановить';$('regProgress').hidden=false;$('regProgress').firstElementChild.style.width='0%';regStatus('Поиск смещения и вращения…');updateButtons();
   worker.onmessage=({data})=>{
     if(data.type==='progress'){$('regProgress').firstElementChild.style.width=Math.max(2,Math.round(data.fraction*100))+'%';regStatus('Уровень '+data.level+' / '+data.levels+' · '+Math.round(data.fraction*100)+'%');}
     if(data.type==='done'){
-      state.params=data.result.params;state.registration=data.result;updateParams();stopRegistration(false);scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
+      state.params=data.result.params;state.registration=data.result;stopRegistration(false);scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
       regStatus('Завершено · '+format(r.elapsedMs/1000,1)+' с',good?'success':'warning');
       $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выборки '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+(good?'Проверь границы в режиме «Форточка».':'Совмещение требует визуальной проверки; при необходимости уточни вручную.');
       $('workspaceStatus').textContent='Корегистрация выполнена · результат в сетке A';requestRender();
@@ -184,9 +199,10 @@ function demo(){
   clearAll(false);const pair=makeDemo();setVolume('a',pair.a);setVolume('b',pair.b);state.demo=true;$('demoNotice').hidden=false;state.slice=Math.round(pair.a.dims[2]/2+1);configureSlice();requestRender();regStatus('Фантом смещён · запусти корегистрацию','warning');
 }
 function clearAll(announce=true){
+  cancelManualMode();
   stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;
   for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
-  $('demoNotice').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('workspaceStatus').textContent='Готов к загрузке';$('readyDot').className='status-dot';$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateParams();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
+  $('demoNotice').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('workspaceStatus').textContent='Готов к загрузке';$('readyDot').className='status-dot';$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }
 function saveBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
@@ -225,11 +241,12 @@ for(const slot of ['a','b']){
   for(const kind of ['wl','ww'])$(kind+slot.toUpperCase()).addEventListener('input',e=>{const v=Number(e.target.value);if(!Number.isFinite(v)||(kind==='ww'&&v<1))return;state.windows[slot][kind==='wl'?'level':'width']=v;requestRender();});
 }
 document.querySelectorAll('[data-auto]').forEach(btn=>btn.addEventListener('click',()=>{const slot=btn.dataset.auto;if(!state[slot])return;state.windows[slot]={level:state[slot].stats.level,width:state[slot].stats.width};$('wl'+slot.toUpperCase()).value=Number(state.windows[slot].level.toFixed(2));$('ww'+slot.toUpperCase()).value=Number(state.windows[slot].width.toFixed(2));requestRender();}));
-for(let i=0;i<6;i++)$('p'+i).addEventListener('input',e=>{if(state.regWorker)stopRegistration(false);const v=Number(e.target.value);if(!Number.isFinite(v))return;state.params[i]=v;invalidateRegistration();scheduleResampling(180);requestRender();});
+$('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state.regWorker)stopRegistration(false);if($('manualMode').checked)document.querySelector('[data-display="blend"]').click();canvases.r.parentElement.classList.toggle('manual-active',$('manualMode').checked);updateButtons();});
+for(const [id,degrees] of [['rotateLeft',-1],['rotateRight',1]])$(id).addEventListener('click',()=>{if(!$('manualMode').checked||!(state.a&&state.b))return;state.params=rotateInPlane(state.params,planeInfo(state.a),degrees);invalidateRegistration();scheduleResampling();requestRender();});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();}));
 function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':Number($('resultGain').value).toFixed(1)+'×';}
-document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Доля B в наложении':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
+document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='blend'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Доля B в наложении':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
 for(const id of ['sign','weight','palette','rawScale','resultGain','subtractionMode'])$(id).addEventListener('input',()=>{$('rawScale').disabled=$('subtractionMode').value!=='raw';updateGain();requestRender();});
 $('sliceSlider').addEventListener('input',e=>{state.slice=Number(e.target.value);configureSlice();requestRender();});$('prevSlice').addEventListener('click',()=>stepSlice(-1));$('nextSlice').addEventListener('click',()=>stepSlice(1));
@@ -240,9 +257,14 @@ $('closeDownload').addEventListener('click',()=>$('downloadDialog').close());
 for(const key of ['a','b','r']){
   const wrap=canvases[key].parentElement;wrap.addEventListener('wheel',e=>{e.preventDefault();stepSlice(e.deltaY>0?1:-1);},{passive:false});let drag=null;
   const moveWindow=e=>{if(key!=='r'||state.display!=='window'||!(state.a&&state.b))return;const canvas=canvases.r,rect=canvas.getBoundingClientRect();state.reveal=pointerToImage((e.clientX-rect.left)*canvas.width/rect.width,(e.clientY-rect.top)*canvas.height/rect.height,canvas,planeInfo(state.a),state.zoom);requestRender();};
-  wrap.addEventListener('pointerdown',e=>{if(!(state.a||state.b))return;drag={x:e.clientX,y:e.clientY,wl:state.windows[key]?.level,ww:state.windows[key]?.width,zoom:state.zoom,shift:e.shiftKey};wrap.setPointerCapture(e.pointerId);if(!e.shiftKey)moveWindow(e);});
-  wrap.addEventListener('pointermove',e=>{if(key==='r'&&state.display==='window'&&!e.shiftKey&&(e.pointerType==='mouse'||drag))moveWindow(e);if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(drag.shift){state.zoom=clamp(drag.zoom*Math.exp(-dy*.008),.2,6);}else if(key!=='r'&&state[key]){const step=Math.max(1,state[key].stats.width)/250;state.windows[key]={level:drag.wl+dy*step,width:Math.max(1,drag.ww+dx*step)};$('wl'+key.toUpperCase()).value=Math.round(state.windows[key].level);$('ww'+key.toUpperCase()).value=Math.round(state.windows[key].width);}requestRender();});
-  wrap.addEventListener('pointerup',()=>drag=null);wrap.addEventListener('pointercancel',()=>drag=null);
+  wrap.addEventListener('pointerdown',e=>{if(!(state.a||state.b))return;if(key==='r'&&$('manualMode').checked&&state.a&&state.b&&!e.shiftKey){
+    const canvas=canvases.r,rect=canvas.getBoundingClientRect(),start={x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height};
+    drag={manual:true,start,params:[...state.params],canvasSize:{width:canvas.width,height:canvas.height},plane:planeInfo(state.a),zoom:state.zoom,pointerId:e.pointerId,changed:false};
+    stopResampling();state.manualDragging=true;updateButtons();wrap.setPointerCapture(e.pointerId);return;
+  }drag={x:e.clientX,y:e.clientY,wl:state.windows[key]?.level,ww:state.windows[key]?.width,zoom:state.zoom,shift:e.shiftKey,pointerId:e.pointerId};wrap.setPointerCapture(e.pointerId);if(!e.shiftKey)moveWindow(e);});
+  wrap.addEventListener('pointermove',e=>{if(drag?.manual){if(drag.pointerId!==e.pointerId||!state.manualDragging)return;const canvas=canvases.r,rect=canvas.getBoundingClientRect(),end={x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height};state.params=dragTranslation(drag.params,drag.start,end,drag.canvasSize,drag.plane,drag.zoom);previewShift={x:end.x-drag.start.x,y:end.y-drag.start.y};drag.changed=drag.changed||Math.hypot(previewShift.x,previewShift.y)>0;if(!manualFrame)manualFrame=requestAnimationFrame(renderManualPreview);return;}if(key==='r'&&state.display==='window'&&!$('manualMode').checked&&!e.shiftKey&&(e.pointerType==='mouse'||drag))moveWindow(e);if(!drag||drag.pointerId!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(drag.shift){state.zoom=clamp(drag.zoom*Math.exp(-dy*.008),.2,6);}else if(key!=='r'&&state[key]){const step=Math.max(1,state[key].stats.width)/250;state.windows[key]={level:drag.wl+dy*step,width:Math.max(1,drag.ww+dx*step)};$('wl'+key.toUpperCase()).value=Math.round(state.windows[key].level);$('ww'+key.toUpperCase()).value=Math.round(state.windows[key].width);}requestRender();});
+  wrap.addEventListener('pointerup',e=>{if(!drag||drag.pointerId!==e.pointerId)return;if(drag.manual&&state.manualDragging){state.manualDragging=false;if(drag.changed)invalidateRegistration();scheduleResampling();updateButtons();}drag=null;});
+  wrap.addEventListener('pointercancel',e=>{if(!drag||drag.pointerId!==e.pointerId)return;if(drag.manual&&state.manualDragging){state.params=drag.params;state.manualDragging=false;scheduleResampling();updateButtons();}drag=null;});
 }
 document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)||document.querySelector('dialog[open]'))return;if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();stepSlice(e.key==='ArrowUp'?-1:1);}});
 new ResizeObserver(requestRender).observe(document.querySelector('.viewers'));
