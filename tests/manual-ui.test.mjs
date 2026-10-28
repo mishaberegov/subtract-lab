@@ -28,7 +28,7 @@ test('manual editing switches to overlay and leaving overlay exits editing',()=>
   assert.match(app,/state\.display!=='blend'&&\$\('manualMode'\)\.checked\)cancelManualMode\(\)/);
 });
 test('reset and clear exit manual mode, automatic registration and transform export remain wired',()=>{
-  assert.match(app,/function resetRegistration\(\)[\s\S]*?cancelManualMode\(\)/);
+  assert.match(app,/function resetRegistration\([^)]*\)[\s\S]*?cancelManualMode\(\)/);
   assert.match(app,/function clearAll\(announce=true\)[\s\S]*?cancelManualMode\(\)/);
   assert.match(app,/worker\.postMessage\(\{a:state\.a,b:state\.b,method:/);
   assert.match(app,/matrixAtoB4x4:/);

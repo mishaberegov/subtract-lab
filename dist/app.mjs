@@ -4,7 +4,8 @@ import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane} from './manual-alignment.mjs';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-l10n2';
+import {nextRegistrationState,registrationStatusText} from './registration-status.mjs';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-l10n4';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
@@ -13,7 +14,7 @@ for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl
 const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','metaA','metaB','grayNote','scanSummary','registrationReport','positionLabel','gainLabel','warningNotice','nameA','nameB','registerBtn','exportNifti']);
 const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.id.startsWith('name')&&!/^(Чтение файлов|Чтение DICOM|Сборка объёма|Перетащи DICOM)/.test(node.nodeValue))continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
 uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
+const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
 for(const [id,lang] of [['langEn','en'],['langRu','ru']])$(id).addEventListener('click',event=>{
   if(lang===language){event.preventDefault();return;}
   const unsaved=!!(state.loading.size||(state.a&&!state.a?.synthetic)||(state.b&&!state.b?.synthetic)||state.registration||state.params.some(x=>x!==0));
@@ -23,7 +24,8 @@ let toastTimer,renderFrame,pickSlot='a',activeScan=null,niftiUrl=null;
 const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString(language==='ru'?'ru-RU':'en-US'):'—';
 function toast(message,error=false){$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,error?16000:6000);}
 function regStatus(text,type=''){const e=$('regStatus');e.replaceChildren();const dot=document.createElement('span');dot.className='status-dot '+type;const label=document.createElement('span');label.textContent=text;e.append(dot,label);}
-function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('rotateLeft').disabled=$('rotateRight').disabled=!ready||loading||!$('manualMode').checked||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
+function setRegistrationStage(event,quality){state.registrationStage=nextRegistrationState(state.registrationStage,event,state.hasCompletedRegistration);if(event==='volume')state.hasCompletedRegistration=false;if(event==='success')state.hasCompletedRegistration=true;regStatus(registrationStatusText(state.registrationStage),quality||(state.registrationStage==='complete'?'success':state.registrationStage==='not-run'?'':'warning'));}
+function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('metric').disabled=!!state.regWorker;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('rotateLeft').disabled=$('rotateRight').disabled=!ready||loading||!$('manualMode').checked||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
 function updateGridInfo(){
   const both=!!(state.a&&state.b);$('geometryStrip').hidden=!both;
   for(const slot of ['a','b']){
@@ -66,15 +68,15 @@ function scheduleResampling(delay=0){
     worker.postMessage({reference,moving:state.b,params:[...state.params],antiAlias:$('antiAlias').checked});
   },delay);
 }
-function invalidateRegistration(label='Совмещение изменено вручную'){
-  state.registration=null;$('registrationReport').hidden=true;regStatus(label,'warning');
+function invalidateRegistration(){
+  state.registration=null;$('registrationReport').hidden=true;setRegistrationStage('manual');
 }
 function cancelManualMode(){state.manualDragging=false;$('manualMode').checked=false;canvases.r.parentElement.classList.remove('manual-active');updateButtons();}
-function resetRegistration(){
+function resetRegistration(event='reset'){
   cancelManualMode();
   if(state.regWorker)stopRegistration(false);
   state.params=[0,0,0,0,0,0];state.registration=null;$('registrationReport').hidden=true;
-  regStatus(state.a&&state.b?'По координатам DICOM · не уточнено':'Сначала загрузи две серии',state.a&&state.b?'warning':'');
+  setRegistrationStage(event);
   scheduleResampling();
 }
 function updateWarnings(){
@@ -89,7 +91,7 @@ function setVolume(slot,volume){
   state.windows[slot]={...volume.window};const up=slot.toUpperCase();
   $('wl'+up).value=Number(volume.window.level.toFixed(2));$('ww'+up).value=Number(volume.window.width.toFixed(2));
   $('name'+up).textContent=volume.synthetic?localizeMessage(volume.name,language):volume.name;$('meta'+up).textContent=volume.modality+' · '+volume.dims.join(' × ')+' · '+(volume.synthetic?'синтетический':'DICOM');$('dot'+up).classList.add('loaded');$('label'+up).textContent=volume.modality+' · '+volume.dims[2]+' срезов';
-  resetRegistration();resetView();updateWarnings();updateButtons();
+  resetRegistration('volume');resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
 
 }
@@ -197,24 +199,24 @@ function startRegistration(){
     if(data.type==='progress'){$('regProgress').firstElementChild.style.width=Math.max(2,Math.round(data.fraction*100))+'%';regStatus('Уровень '+data.level+' / '+data.levels+' · '+Math.round(data.fraction*100)+'%');}
     if(data.type==='done'){
       state.params=data.result.params;state.registration=data.result;stopRegistration(false);scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
-      regStatus('Завершено · '+format(r.elapsedMs/1000,1)+(language==='ru'?' с':' s'),good?'success':'warning');
+      setRegistrationStage('success',good?'success':'warning');
       $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выборки '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+(good?'Проверь границы в режиме «Форточка».':'Совмещение требует визуальной проверки; при необходимости уточни вручную.');
       requestRender();
     }
-    if(data.type==='error'){stopRegistration(false);regStatus('Корегистрация не выполнена','warning');toast(data.message,true);}
+    if(data.type==='error'){stopRegistration();toast(data.message,true);}
   };
-  worker.onerror=e=>{stopRegistration(false);regStatus('Ошибка корегистрации','warning');toast(e.message||'Ошибка вычисления.',true);};
+  worker.onerror=e=>{stopRegistration();toast(e.message||'Ошибка вычисления.',true);};
   worker.postMessage({a:state.a,b:state.b,method:$('metric').value,initial:state.params});
 }
-function stopRegistration(announce=true){state.regWorker?.terminate();state.regWorker=null;$('registerBtn').classList.remove('running');$('registerBtn').innerHTML='<svg><use href="#i-cross"/></svg>Корегистрировать';$('regProgress').hidden=true;if(announce)regStatus('Остановлено · прежнее преобразование сохранено','warning');updateButtons();}
+function stopRegistration(announce=true){state.regWorker?.terminate();state.regWorker=null;$('registerBtn').classList.remove('running');$('registerBtn').innerHTML='<svg><use href="#i-cross"/></svg>Корегистрировать';$('regProgress').hidden=true;if(announce)setRegistrationStage('stop');updateButtons();}
 function demo(){
-  clearAll(false);const pair=makeDemo();setVolume('a',pair.a);setVolume('b',pair.b);state.demo=true;$('demoMarker').hidden=$('clearBtn').hidden=false;state.slice=Math.round(pair.a.dims[2]/2+1);configureSlice();requestRender();regStatus('Фантом смещён · запусти корегистрацию','warning');
+  clearAll(false);const pair=makeDemo();setVolume('a',pair.a);setVolume('b',pair.b);state.demo=true;$('demoMarker').hidden=$('clearBtn').hidden=false;state.slice=Math.round(pair.a.dims[2]/2+1);configureSlice();requestRender();
 }
 function clearAll(announce=true){
   cancelManualMode();
-  stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;
+  stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;state.registrationStage='not-run';state.hasCompletedRegistration=false;
   for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
-  $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
+  $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;setRegistrationStage('volume');$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }
 function saveBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
@@ -255,6 +257,7 @@ for(const slot of ['a','b']){
 document.querySelectorAll('[data-auto]').forEach(btn=>btn.addEventListener('click',()=>{const slot=btn.dataset.auto;if(!state[slot])return;state.windows[slot]={level:state[slot].stats.level,width:state[slot].stats.width};$('wl'+slot.toUpperCase()).value=Number(state.windows[slot].level.toFixed(2));$('ww'+slot.toUpperCase()).value=Number(state.windows[slot].width.toFixed(2));requestRender();}));
 $('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state.regWorker)stopRegistration(false);if($('manualMode').checked)document.querySelector('[data-display="blend"]').click();canvases.r.parentElement.classList.toggle('manual-active',$('manualMode').checked);updateButtons();});
 for(const [id,degrees] of [['rotateLeft',-1],['rotateRight',1]])$(id).addEventListener('click',()=>{if(!$('manualMode').checked||!(state.a&&state.b))return;state.params=rotateInPlane(state.params,planeInfo(state.a),degrees);invalidateRegistration();scheduleResampling();requestRender();});
+$('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('registrationReport').hidden=true;});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();}));
 function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':format(Number($('resultGain').value),1)+'×';}
