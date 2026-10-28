@@ -10,7 +10,7 @@ const language=languageFromUrl(location.href);
 localizeDocument(document,language);
 for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl(location.href,lang);if(lang===language)$(id).setAttribute('aria-current','page');}
 // Only application-owned output is translated; patient series names and DICOM metadata stay intact.
-const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','metaA','metaB','infoR','grayNote','scanSummary','workspaceStatus','registrationReport','positionLabel','gainLabel','warningNotice','nameA','nameB','registerBtn','exportNifti']);
+const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','metaA','metaB','grayNote','scanSummary','registrationReport','positionLabel','gainLabel','warningNotice','nameA','nameB','registerBtn','exportNifti']);
 const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.id.startsWith('name')&&!/^(Чтение файлов|Чтение DICOM|Сборка объёма|Перетащи DICOM)/.test(node.nodeValue))continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
 uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
@@ -91,7 +91,7 @@ function setVolume(slot,volume){
   $('name'+up).textContent=volume.synthetic?localizeMessage(volume.name,language):volume.name;$('meta'+up).textContent=volume.modality+' · '+volume.dims.join(' × ')+' · '+(volume.synthetic?'синтетический':'DICOM');$('dot'+up).classList.add('loaded');$('label'+up).textContent=volume.modality+' · '+volume.dims[2]+' срезов';
   resetRegistration();resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
-  $('workspaceStatus').textContent=state.a&&state.b?'Обе серии загружены · готово к совмещению':'Загружена серия '+up;$('readyDot').className='status-dot '+(state.a&&state.b?'success':'');
+
 }
 function resetView(){state.zoom=1;const v=state.a||state.b;if(v)state.slice=Math.floor(sliceCount(v)/2);configureSlice();requestRender();}
 function sliceCount(v){return v.dims[planeMapping(v,state.plane,0).normalAxis];}
@@ -123,7 +123,7 @@ function render(){
     if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;
     const ctx=canvas.getContext('2d');ctx.fillStyle=key==='r'?'#090909':'#090c0e';ctx.fillRect(0,0,width,height);
     wrap.querySelector('.empty-view').hidden=key==='r'?!!(state.a&&state.b):key==='a'?!!state.a:!!state.b;
-    wrap.querySelectorAll('.orientation,.canvas-corner,.scale-mark,.signed-legend').forEach(e=>e.style.visibility=base&&(key==='r'?state.a&&state.b:state[key])?'visible':'hidden');
+    wrap.querySelectorAll('.orientation,.canvas-corner,.scale-mark').forEach(e=>e.style.visibility=base&&(key==='r'?state.a&&state.b:state[key])?'visible':'hidden');
   }
   if(!base)return;
   const pi=planeInfo(base),[nx,ny]=base.dims,map=state.a&&state.b?samplingMap(state.a,state.b,state.params):null;
@@ -154,12 +154,11 @@ function render(){
     const bounds=imageBounds(canvas,pi,state.zoom);
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(off,bounds.x,bounds.y,bounds.w,bounds.h);
     for(const [label,axis]of [['Top',pi.v.map(x=>-x)],['Bottom',pi.v],['Left',pi.u.map(x=>-x)],['Right',pi.u]])$(key+label).textContent=orientationLabel(axis);
-    $('info'+key.toUpperCase()).textContent=key==='r'?state.display==='difference'?(raw?'Δ · исходные единицы':'Δ · нормированные')+(sign===1?' A − kB':' kB − A')+'\n'+format(state.zoom,2)+'×':state.display==='window'?'A снаружи · B внутри':'A + B · '+Math.round(gain/4*100)+'% B':pi.w+' × '+pi.h+'\n'+format(pi.sx,2)+' × '+format(pi.sy,2)+' mm';
+    if(key!=='r')$('info'+key.toUpperCase()).textContent=pi.w+' × '+pi.h+'\n'+format(pi.sx,2)+' × '+format(pi.sy,2)+' mm';
   }
   const coord=world(base,pi.voxel((pi.w-1)/2,(pi.h-1)/2));$('positionLabel').textContent='L '+format(coord[0])+' · P '+format(coord[1])+' · S '+format(coord[2])+' mm';
   $('resultTitle').textContent=state.display==='difference'?(sign===1?'A − B':'B − A'):state.display==='window'?'A / B':'A + B';
-  $('legend').hidden=state.display!=='difference';$('legend').querySelector('i').style.background=palette==='gray'?'linear-gradient(to right,#000,#888,#fff)':palette==='absolute'?'linear-gradient(to right,#000,#fff)':'';
-  $('legend').lastElementChild.textContent=palette==='absolute'?'|Δ|':'+';
+
   $('grayNote').textContent=palette==='absolute'?'Модуль разницы: ноль — чёрный.':'Нулевая разница — средний серый.';
 }
 function loadFiles(slot,files){
@@ -200,7 +199,7 @@ function startRegistration(){
       state.params=data.result.params;state.registration=data.result;stopRegistration(false);scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
       regStatus('Завершено · '+format(r.elapsedMs/1000,1)+(language==='ru'?' с':' s'),good?'success':'warning');
       $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выборки '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+(good?'Проверь границы в режиме «Форточка».':'Совмещение требует визуальной проверки; при необходимости уточни вручную.');
-      $('workspaceStatus').textContent='Корегистрация выполнена · результат в сетке A';requestRender();
+      requestRender();
     }
     if(data.type==='error'){stopRegistration(false);regStatus('Корегистрация не выполнена','warning');toast(data.message,true);}
   };
@@ -215,7 +214,7 @@ function clearAll(announce=true){
   cancelManualMode();
   stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;
   for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
-  $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('workspaceStatus').textContent='Готов к загрузке';$('readyDot').className='status-dot';$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
+  $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;regStatus('Сначала загрузи две серии');$('positionLabel').textContent='Синхронная прокрутка';configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }
 function saveBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
