@@ -51,3 +51,14 @@
  .viewport-pickers button span{display:none}
  .viewport-pickers button{width:32px;height:30px;padding:5px}
 }
+
+/* Slightly larger labels throughout the dense workspace. */
+:root{font-size:14px}
+.workspace-heading p,.local-badge,.notice,.field-label,.sidebar .workflow-section label{font-size:12px}
+.sidebar-heading,.sidebar-bottom,.tiny-label,.manual-note,.palette-note,.grid-note,.mouse-hint{font-size:11px}
+.sidebar .workflow-section h2{font-size:14px}
+.viewport-title strong,.series-summary,.range-label,.plane-tabs button,.result-tabs button,.window-controls label,.window-controls input,.viewport-subtitle{font-size:12px}
+.viewport-pickers button,.reveal-controls,.reveal-controls>span{font-size:11px}
+.geometry-strip small{font-size:9px}
+.geometry-strip strong{font-size:12px}
+.geometry-strip span,.geometry-strip p{font-size:10px}
