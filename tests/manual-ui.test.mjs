@@ -4,9 +4,12 @@ import {readFileSync} from 'node:fs';
 const html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
 const app=readFileSync(new URL('../dist/app.mjs',import.meta.url),'utf8');
 
-test('manual alignment is an explicit mode with rotation controls, not six numeric fields',()=>{
+test('manual alignment uses corner handles without one-degree buttons or numeric pose fields',()=>{
   assert.match(html,/id="manualMode"[^>]*type="checkbox"/);
-  assert.match(html,/id="rotateLeft"/);assert.match(html,/id="rotateRight"/);
+  assert.doesNotMatch(html,/id="rotateLeft"|id="rotateRight"|class="manual-rotate"/);
+  assert.doesNotMatch(app,/\$\('rotateLeft'\)|\$\('rotateRight'\)/);
+  assert.match(html,/data-rotate-handle="tl"/);
+  assert.match(html,/id="resetTransform"/);
   assert.doesNotMatch(html,/id="p[0-5]"/);
   assert.match(html,/Перетащи B поверх A/);
   assert.match(app,/if\(\$\('manualMode'\)\.checked\)document\.querySelector\('\[data-display="blend"\]'\)\.click\(\)/);

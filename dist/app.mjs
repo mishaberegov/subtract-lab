@@ -6,7 +6,7 @@ import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-boojum1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-noangles1';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
@@ -26,7 +26,7 @@ const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString(lan
 function toast(message,error=false){$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,error?16000:6000);}
 function regStatus(text,type=''){const e=$('regStatus');e.replaceChildren();const dot=document.createElement('span');dot.className='status-dot '+type;const label=document.createElement('span');label.textContent=text;e.append(dot,label);}
 function setRegistrationStage(event,quality){state.registrationStage=nextRegistrationState(state.registrationStage,event,state.hasCompletedRegistration);if(event==='volume')state.hasCompletedRegistration=false;if(event==='success')state.hasCompletedRegistration=true;regStatus(registrationStatusText(state.registrationStage),quality||(state.registrationStage==='complete'?'success':state.registrationStage==='not-run'?'':'warning'));}
-function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('metric').disabled=!!state.regWorker;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('rotateLeft').disabled=$('rotateRight').disabled=!ready||loading||!$('manualMode').checked||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
+function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('metric').disabled=!!state.regWorker;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
 function updateGridInfo(){
   const both=!!(state.a&&state.b);$('geometryStrip').hidden=!both;
   for(const slot of ['a','b']){
@@ -272,7 +272,6 @@ for(const slot of ['a','b']){
 }
 document.querySelectorAll('[data-auto]').forEach(btn=>btn.addEventListener('click',()=>{const slot=btn.dataset.auto;if(!state[slot])return;state.windows[slot]={level:state[slot].stats.level,width:state[slot].stats.width};$('wl'+slot.toUpperCase()).value=Number(state.windows[slot].level.toFixed(2));$('ww'+slot.toUpperCase()).value=Number(state.windows[slot].width.toFixed(2));requestRender();}));
 $('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state.regWorker)stopRegistration(false);if($('manualMode').checked)document.querySelector('[data-display="blend"]').click();$('manualHint').hidden=!$('manualMode').checked;document.querySelectorAll('[data-rotate-handle]').forEach(h=>h.hidden=!$('manualMode').checked);canvases.r.parentElement.classList.toggle('manual-active',$('manualMode').checked);updateButtons();});
-for(const [id,degrees] of [['rotateLeft',-1],['rotateRight',1]])$(id).addEventListener('click',()=>{if(!$('manualMode').checked||!(state.a&&state.b))return;state.params=rotateInPlane(state.params,planeInfo(state.a),degrees);invalidateRegistration();scheduleResampling();requestRender();});
 $('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('registrationReport').hidden=true;});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();}));
