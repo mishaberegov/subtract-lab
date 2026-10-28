@@ -10,6 +10,14 @@ export function dragTranslation(params,start,end,canvas,plane,zoom){
   const delta=mv(rotation(params),shift);
   return params.map((x,i)=>i<3?x-delta[i]:x);
 }
+export function rotationDragDegrees(start,end,centre){
+  const a=Math.atan2(start.y-centre.y,start.x-centre.x);
+  const b=Math.atan2(end.y-centre.y,end.x-centre.x);
+  let degrees=(b-a)*180/Math.PI;
+  if(degrees>180)degrees-=360;
+  if(degrees< -180)degrees+=360;
+  return degrees;
+}
 
 // A positive step rotates the displayed B clockwise (screen coordinates: y down).
 // Compose a physical rotation with the existing rigid pose about the reference centre.

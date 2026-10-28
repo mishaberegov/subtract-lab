@@ -19,7 +19,7 @@ test('manual controls sit beside the result image instead of below the workspace
 });
 test('drag previews the cached aligned B with a canvas shift, then resamples on release',()=>{
   assert.match(app,/function renderManualPreview\(/);
-  assert.match(app,/ctx\.drawImage\(offscreen\.b,/);
+  assert.match(app,/ctx\.drawImage\(offscreen\.fusion,/);
   assert.match(app,/dragTranslation\(/);
   assert.match(app,/pointerup[^\n]*scheduleResampling\(/);
 });
