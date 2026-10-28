@@ -62,3 +62,4 @@
 .geometry-strip small{font-size:9px}
 .geometry-strip strong{font-size:12px}
 .geometry-strip span,.geometry-strip p{font-size:10px}
+@media(max-width:1450px){.upload-viewport .viewport-title .viewport-subtitle{display:none}}
