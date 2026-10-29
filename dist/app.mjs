@@ -1,4 +1,4 @@
-import {clamp,center,rotation,samplingMap,mapped,sample,windowValue,difference,makeDemo} from './core.mjs';
+import {clamp,center,rotation,samplingMap,mapped,sample,windowValue,difference,makeDemo} from './core.mjs?v=1.1.1-fov1';
 import {gridSpacing} from './resampling.mjs';
 import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
@@ -209,7 +209,7 @@ function cancelScan(){if(activeScan){const slot=activeScan.slot;state.loadWorker
 function startRegistration(){
   if(state.regWorker){stopRegistration();return;}if(!(state.a&&state.b))return;
   cancelManualMode();
-  const worker=new Worker('./register-worker.mjs',{type:'module'});state.regWorker=worker;
+  const worker=new Worker('./register-worker.mjs?v=1.1.1-fov1',{type:'module'});state.regWorker=worker;
   $('registerBtn').classList.add('running');$('registerBtn').textContent='Остановить';$('regProgress').hidden=false;$('regProgress').firstElementChild.style.width='0%';regStatus('Поиск смещения и вращения…');updateButtons();
   worker.onmessage=({data})=>{
     if(data.type==='progress'){$('regProgress').firstElementChild.style.width=Math.max(2,Math.round(data.fraction*100))+'%';regStatus('Уровень '+data.level+' / '+data.levels+' · '+Math.round(data.fraction*100)+'%');}

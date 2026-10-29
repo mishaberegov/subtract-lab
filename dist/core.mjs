@@ -65,12 +65,19 @@ export function downsample(v){
   }
   return {...v,dims,data:out,matrix:v.matrix.map(x=>x*2)};
 }
-function makeSamples(v,limit){
+function makeSamples(v,limit,region=null){
   const st=v.stats||statistics(v),points=[],step=Math.max(1,Math.ceil(Math.cbrt(v.data.length/limit))),[nx,ny,nz]=v.dims;
   // Retain tissue and its boundaries, while excluding the air-only background.
   const threshold=st.lo+(st.hi-st.lo)*.025;
   for(let z=0;z<nz;z+=step)for(let y=0;y<ny;y+=step)for(let x=0;x<nx;x+=step){const f=v.data[(z*ny+y)*nx+x];if(Number.isFinite(f)&&f>threshold)points.push([x,y,z,f]);}
   if(points.length<40)throw Error('Недостаточно текстуры или объёма для корегистрации.');
+  if(region){
+    const selected=points.filter(([x,y,z])=>{
+      const q=mapped(region.map,x,y,z);
+      return q.every((p,i)=>p>=-region.padding[i]&&p<=region.dims[i]-1+region.padding[i]);
+    });
+    if(selected.length>=40)return selected;
+  }
   return points;
 }
 function metricFactory(a,b,points,method){
@@ -100,10 +107,15 @@ export async function registerRigid(a,b,{method='ncc',initial=[0,0,0,0,0,0],onPr
   while(Math.max(...pa.at(-1).dims)>64&&Math.min(...pa.at(-1).dims)>6)pa.push(downsample(pa.at(-1)));
   while(Math.max(...pb.at(-1).dims)>64&&Math.min(...pb.at(-1).dims)>6)pb.push(downsample(pb.at(-1)));
   const levels=Math.min(quality==='fine'?4:3,Math.max(pa.length,pb.length));
+  // When A includes anatomy beyond B, sample their common field rather than
+  // letting A-only slices dominate the overlap penalty and initial search.
+  const extent=(v,i)=>v.dims[i]*Math.hypot(v.matrix[i],v.matrix[i+3],v.matrix[i+6]);
+  const restrictToMoving=a.dims.some((_,i)=>extent(a,i)>1.4*extent(b,i));
+  const region=(av,bv)=>restrictToMoving?{map:samplingMap(av,bv,initial),dims:bv.dims,padding:bv.dims.map((_,i)=>40/Math.hypot(bv.matrix[i],bv.matrix[i+3],bv.matrix[i+6]))}:null;
   let p=[...initial],baseline=null,last=null,evaluations=0;
   for(let level=0;level<levels;level++){
     if(cancelled())throw Error('Корегистрация отменена.');
-    const av=pa[Math.max(0,pa.length-1-level)],bv=pb[Math.max(0,pb.length-1-level)],points=makeSamples(av,level===levels-1?18000:9000),metric=metricFactory(av,bv,points,method);
+    const av=pa[Math.max(0,pa.length-1-level)],bv=pb[Math.max(0,pb.length-1-level)],points=makeSamples(av,level===levels-1?18000:9000,region(av,bv)),metric=metricFactory(av,bv,points,method);
     let best=metric(p);evaluations++;
     if(level===0){
       baseline=best;
@@ -132,7 +144,7 @@ export async function registerRigid(a,b,{method='ncc',initial=[0,0,0,0,0,0],onPr
     last=best;
   }
   // Scores before/after are both evaluated at the same final resolution/samples.
-  const metric=metricFactory(a,b,makeSamples(a,20000),method),before=metric(initial),after=metric(p);
+  const metric=metricFactory(a,b,makeSamples(a,20000,region(a,b)),method),before=metric(initial),after=metric(p);
   return {params:p,before,after,method,evaluations,elapsedMs:Date.now()-started};
 }
 export function makeDemo(n=112){
