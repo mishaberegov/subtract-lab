@@ -29,7 +29,7 @@ Regular monochrome scalar volumes with ImagePositionPatient, ImageOrientationPat
 
 Codecs: uncompressed implicit/explicit LE, explicit BE, Deflated Explicit LE, RLE, JPEG Lossless 57/70, JPEG-LS 80/81, JPEG2000 90/91 and JPEG Baseline 8 bit 50. HTJ2K, JPEG Extended 12 bit, RGB and classic multiframe without frame positions are not supported. Compressed multiframe requires a usable offset table or one fragment per frame.
 
-The current memory cap is 100 million voxels per volume (Float32). Large data may exhaust browser memory earlier, especially when creating worker copies, Gaussian prefilter buffers, the full B-on-A cache or exports. NIfTI export is capped at 60 million voxels. Loaded files, transforms and windows are cleared on reload; save the JSON/NIfTI first if needed.
+The browser caps loaded volumes at 60 million voxels (Float32). Larger series are reduced in-plane by finite-pixel block averaging, preserving all physical Z positions; the app warns about the lower in-plane resolution. A single shared boundary slice between two contiguous acquisitions in the same Study/Series/Frame of Reference is resolved by retaining the slice from the acquisition with more images, with an explicit seam warning. Other duplicate positions remain errors. Very large archives may still exhaust browser memory during ZIP extraction, registration, B-on-A caching or export. NIfTI export is capped at 60 million voxels. Loaded files, transforms and windows are cleared on reload; save the JSON/NIfTI first if needed.
 
 ## Verification
 

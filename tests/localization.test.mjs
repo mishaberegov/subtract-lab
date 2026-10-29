@@ -22,6 +22,7 @@ test('static strings and dynamic status/error messages translate without alterin
   assert.equal(localizeMessage('Чтение DICOM · 45%','en'),'Reading DICOM · 45%');
   assert.equal(localizeMessage('Transfer Syntax 1.2.840.10008 пока не поддерживается. Экспортируй DICOM без сжатия.','en'),'Transfer Syntax 1.2.840.10008 is not supported yet. Export uncompressed DICOM.');
 });
+test('overlap and large-volume notices translate without exposing identifiers',()=>{const input='Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён; проверь стык перед количественным анализом. Большой объём: разрешение в плоскости уменьшено в 2 раза усреднением (до 256×256×719); исходные срезы по оси Z сохранены.';const result=localizeMessage(input,'en');assert.match(result,/Two sequential acquisitions overlap at one slice/);assert.match(result,/256×256×719/);assert.doesNotMatch(result,/[а-яА-ЯёЁ]/);});
 test('interpolated-slice warning and remaining geometry limits are localized',()=>{
   const message='Интерполировано срезов: 1. Интерполяция не восстанавливает отсутствующие детали; проверь результат перед количественным анализом.';
   assert.match(localizeMessage(message,'en'),/Interpolated slices: 1/);

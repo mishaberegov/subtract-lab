@@ -34,7 +34,7 @@ export function parseFile(bytes,name,parser=globalThis.dicomParser){
     if(!ipp||ipp.length!==3||!iop||iop.length!==6||!spacing||spacing.length!==2||[...ipp,...iop,...spacing].some(x=>!Number.isFinite(x))||spacing.some(x=>x<=0))throw Error('Нет корректных ImagePositionPatient / ImageOrientationPatient / PixelSpacing.');
     const u=iop.slice(0,3),v=iop.slice(3),norm=cross(u,v);
     if(Math.abs(dot(u,u)-1)>.005||Math.abs(dot(v,v)-1)>.005||Math.abs(dot(u,v))>.005)throw Error('Некорректные косинусы ориентации DICOM.');
-    frames.push({ds,index:i,name,rows,cols,ipp,iop,spacing,norm,
+    frames.push({ds,index:i,name,rows,cols,ipp,iop,spacing,norm,acquisition:ds.string('x00200012')||'',
       slope:scalar(rescale,'x00281053',scalar(ds,'x00281053',1)),intercept:scalar(rescale,'x00281052',scalar(ds,'x00281052',0)),
       sliceThicknessMm:scalar(measures,'x00180050',scalar(ds,'x00180050',null)),
       thickness:scalar(measures,'x00180088',scalar(ds,'x00180088',scalar(measures,'x00180050',scalar(ds,'x00180050',1))))});
@@ -51,6 +51,24 @@ export function groupParsed(parsed){
 export function describeGroup(g){return {key:g.key,name:g.name,modality:g.modality,series:g.series,echo:g.echo,frames:g.frames.length,dims:[g.frames[0].cols,g.frames[0].rows,g.frames.length],ts:g.ts};}
 export function geometry(g){
   const frames=[...g.frames],first=frames[0],normal=first.norm;frames.sort((a,b)=>dot(a.ipp,normal)-dot(b.ipp,normal));
+  let seamRemoved=0;
+  const duplicate=[];
+  for(let i=1;i<frames.length;i++)if(Math.abs(dot(frames[i].ipp,normal)-dot(frames[i-1].ipp,normal))<.001)duplicate.push(i);
+  if(duplicate.length===1){
+    const i=duplicate[0],a=frames[i-1],b=frames[i],acquisitions=new Map();
+    for(const frame of frames){const list=acquisitions.get(frame.acquisition)||[];list.push(dot(frame.ipp,normal));acquisitions.set(frame.acquisition,list);}
+    const left=acquisitions.get(a.acquisition),right=acquisitions.get(b.acquisition),at=dot(a.ipp,normal);
+    const bounds=(points)=>points.reduce(([min,max],p)=>[Math.min(min,p),Math.max(max,p)],[Infinity,-Infinity]);
+    const [leftMin,leftMax]=bounds(left||[]),[rightMin,rightMax]=bounds(right||[]);
+    const adjacent=(Math.abs(leftMax-at)<.001&&Math.abs(rightMin-at)<.001)
+      ||(Math.abs(rightMax-at)<.001&&Math.abs(leftMin-at)<.001);
+    // A single shared endpoint from two otherwise disjoint acquisitions is a
+    // seam, not two simultaneous images to blend. Keep the larger block's edge.
+    if(a.acquisition&&b.acquisition&&a.acquisition!==b.acquisition&&acquisitions.size===2&&left.length>1&&right.length>1&&adjacent
+      &&frames.every(q=>q.ds.string('x00200052')===a.ds.string('x00200052')&&q.ds.string('x0020000d')===a.ds.string('x0020000d'))){
+      frames.splice(left.length>right.length?i:i-1,1);seamRemoved=1;
+    }
+  }
   const f=frames[0],n=frames.length,[rows,cols]=[f.rows,f.cols],u=f.iop.slice(0,3),v=f.iop.slice(3);
   for(const q of frames){if(q.rows!==rows||q.cols!==cols||q.iop.some((x,i)=>Math.abs(x-f.iop[i])>.002)||q.spacing.some((x,i)=>Math.abs(x-f.spacing[i])>.005))throw Error('В одной серии смешаны разные размеры, ориентации или PixelSpacing. Выбери одну реконструкцию.');}
   let dz=f.norm.map(x=>x*Math.abs(f.thickness||1)),positions=[0],outputCount=n;
@@ -76,7 +94,7 @@ export function geometry(g){
     }
   }
   const matrix=[u[0]*f.spacing[1],v[0]*f.spacing[0],dz[0],u[1]*f.spacing[1],v[1]*f.spacing[0],dz[1],u[2]*f.spacing[1],v[2]*f.spacing[0],dz[2]];
-  return {frames,matrix,origin:f.ipp,dims:[cols,rows,outputCount],positions};
+  return {frames,matrix,origin:f.ipp,dims:[cols,rows,outputCount],positions,seamRemoved};
 }
 function rleDecode(bytes,rows,cols,bits){
   const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),segments=dv.getUint32(0,true),n=rows*cols,bpp=bits/8;
@@ -137,13 +155,30 @@ export async function decodeFrame(f,{parser=globalThis.dicomParser,codec,lossles
   return out;
 }
 export async function buildVolume(g,{onProgress=()=>{},...options}={}){
-  const geo=geometry(g),n=geo.dims.reduce((a,b)=>a*b,1);
-  if(n>100000000)throw Error('Объём слишком большой для этой браузерной версии (лимит 100 млн вокселей на серию).');
-  const data=new Float32Array(n),stride=geo.dims[0]*geo.dims[1];
-  let interpolated=0,z=0,previous=await decodeFrame(geo.frames[0],options);
+  const geo=geometry(g),[width,height,depth]=geo.dims,budget=options.maxVoxels??60000000;
+  if(!Number.isSafeInteger(budget)||budget<1)throw Error('Некорректный лимит объёма.');
+  let factor=1;
+  while(Math.ceil(width/factor)*Math.ceil(height/factor)*depth>budget&&factor<Math.max(width,height))factor++;
+  const dims=[Math.ceil(width/factor),Math.ceil(height/factor),depth],n=dims.reduce((a,b)=>a*b,1);
+  if(n>budget)throw Error('Объём слишком большой даже после уменьшения плоскости среза.');
+  const matrix=geo.matrix.map((v,i)=>i%3===2?v:v*factor),origin=geo.origin.map((v,i)=>v+(factor-1)*(geo.matrix[i*3]+geo.matrix[i*3+1])/2);
+  const stride=dims[0]*dims[1],data=new Float32Array(n);
+  const reduceFrame=(pixels)=>{
+    if(factor===1)return pixels;
+    const reduced=new Float32Array(stride);
+    for(let y=0;y<dims[1];y++)for(let x=0;x<dims[0];x++){
+      let sum=0,count=0;
+      for(let yy=y*factor;yy<Math.min((y+1)*factor,height);yy++)for(let xx=x*factor;xx<Math.min((x+1)*factor,width);xx++){
+        const value=pixels[yy*width+xx];if(Number.isFinite(value)){sum+=value;count++;}
+      }
+      reduced[y*dims[0]+x]=count?sum/count:NaN;
+    }
+    return reduced;
+  };
+  let interpolated=0,z=0,previous=reduceFrame(await decodeFrame(geo.frames[0],options));
   data.set(previous);z++;onProgress(1/geo.frames.length);
   for(let i=1;i<geo.frames.length;i++){
-    const current=await decodeFrame(geo.frames[i],options),a=geo.positions[i-1],b=geo.positions[i];
+    const current=reduceFrame(await decodeFrame(geo.frames[i],options)),a=geo.positions[i-1],b=geo.positions[i];
     while(z<geo.dims[2]){
       const position=geo.positions.at(-1)*z/(geo.dims[2]-1);
       if(position>b+1e-5)break;
@@ -157,11 +192,13 @@ export async function buildVolume(g,{onProgress=()=>{},...options}={}){
     }
     previous=current;onProgress((i+1)/geo.frames.length);
   }
-  const v={dims:geo.dims,matrix:geo.matrix,origin:geo.origin,data,name:g.name,modality:g.modality,frameUID:g.frameUID,ts:g.ts,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
+  const v={dims,matrix,origin,data,name:g.name,modality:g.modality,frameUID:g.frameUID,ts:g.ts,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
   v.stats=statistics(v);
   const ds=geo.frames[0].ds,wl=scalar(ds,'x00281050',NaN),ww=scalar(ds,'x00281051',NaN);
   v.window=Number.isFinite(wl)&&ww>=1?{level:wl,width:ww}:{level:v.stats.level,width:v.stats.width};
   v.warnings=[];
+  if(geo.seamRemoved)v.warnings.push('Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён; проверь стык перед количественным анализом.');
+  if(factor>1)v.warnings.push(`Большой объём: разрешение в плоскости уменьшено в ${factor} раза усреднением (до ${dims.join('×')}); исходные срезы по оси Z сохранены.`);
   if(interpolated)v.warnings.push(`Интерполировано срезов: ${interpolated}. Интерполяция не восстанавливает отсутствующие детали; проверь результат перед количественным анализом.`);
   if(!g.frameUID)v.warnings.push('В DICOM нет FrameOfReferenceUID: исходное совпадение координат не гарантировано.');
   if(['1.2.840.10008.1.2.4.50','1.2.840.10008.1.2.4.81','1.2.840.10008.1.2.4.91'].includes(g.ts))v.warnings.push('Серия использует сжатие с возможной потерей данных.');
