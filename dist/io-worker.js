@@ -1,6 +1,9 @@
 importScripts('./vendor/dicomParser.min.js','./vendor/fflate.js');
 let groups=[],slot='',busy=false,zipIndices=new Map();
 const codecs={};
+function sameZipEntries(a,b){
+  return a.length===b.length&&a.every((entry,i)=>['name','method','flags','crc','compressed','original','localOffset'].every(key=>entry[key]===b[i][key]));
+}
 async function previewFile(file,parseFile){
   let length=Math.min(file.size,65536);
   while(length){
@@ -59,10 +62,25 @@ async function codec(type){
 }
 self.onmessage=async({data})=>{
   const {parseFile,groupParsed,describeGroup,buildVolume}=await import('./dicom.mjs?v=1.1.4-scan1');
-  const {indexZip,readIndexedEntry}=await import('./zip-index.mjs?v=1.1.5-zip1');
+  const {indexZip,readIndexedEntry}=await import('./zip-index.mjs?v=1.1.6-zipcache1');
   if(busy)return;busy=true;
   try{
     if(data.type==='scan'){
+      if(data.reuse&&data.files.length===1&&groups.length&&zipIndices.size===1){
+        const [[previous,entries]]=zipIndices;
+        const file=data.files[0];
+        if(file.name===previous.name&&file.size===previous.size&&file.lastModified===previous.lastModified){
+          let current;
+          try{current=await indexZip(file);}catch{}
+          if(current&&sameZipEntries(entries,current)){
+            slot=data.slot;
+            for(const group of groups)for(const frame of group.frames)if(frame.source.zipFile===previous)frame.source.zipFile=file;
+            zipIndices=new Map([[file,current]]);
+            self.postMessage({type:'groups',slot,groups:groups.map(describeGroup),skipped:0,errors:[],cachedZip:true,reused:true});
+            return;
+          }
+        }
+      }
       groups=[];zipIndices=new Map();slot=data.slot;let parsed=[],errors=[],skipped=0,total=0,declared=0;const budget={total:0};
       const add=(p,source,name,error)=>{
         if(p){p.frames=p.frames.map(f=>({cols:f.cols,rows:f.rows,source}));parsed.push(p);}
@@ -93,7 +111,7 @@ self.onmessage=async({data})=>{
       }
       groups=groupParsed(parsed);
       if(!groups.length)throw Error('Не найдена подходящая DICOM-серия. '+(errors[0]||'Выбери папку с DICOM-файлами или ZIP.'));
-      self.postMessage({type:'groups',slot,groups:groups.map(describeGroup),skipped,errors});
+      self.postMessage({type:'groups',slot,groups:groups.map(describeGroup),skipped,errors,cachedZip:data.files.length===1&&zipIndices.size===1,reused:false});
     }else if(data.type==='build'){
       const group=groups.find(g=>g.key===data.key);if(!group)throw Error('Серия не найдена. Выбери файлы повторно.');
       const sources=[...new Set(group.frames.map(f=>f.source))],parsed=[];
@@ -127,7 +145,8 @@ self.onmessage=async({data})=>{
       const volume=await buildVolume(selected,{codec,onProgress:f=>self.postMessage({type:'progress',slot,text:'Сборка объёма',fraction:f})});
       const {compactCTVolume}=await import('./precision.mjs?v=1.1.2-warnings1');
       compactCTVolume(volume);
-      self.postMessage({type:'volume',slot,volume},[volume.data.buffer]);groups=[];zipIndices.clear();
+      self.postMessage({type:'volume',slot,volume},[volume.data.buffer]);
+      if(zipIndices.size!==1){groups=[];zipIndices.clear();}
     }
   }catch(e){self.postMessage({type:'error',slot,message:e.message||String(e)});}finally{busy=false;}
 };

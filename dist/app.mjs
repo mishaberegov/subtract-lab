@@ -16,7 +16,7 @@ for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl
 const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','grayNote','scanSummary','registrationReport','gainLabel','warningNotice','registerBtn','exportNifti']);
 const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.dataset.patientName==='true')continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
 uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},loading:new Set(),demo:false};
+const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},zipCache:null,loading:new Set(),demo:false};
 for(const [id,lang] of [['langEn','en'],['langRu','ru']])$(id).addEventListener('click',event=>{
   if(lang===language){event.preventDefault();return;}
   const unsaved=!!(state.loading.size||(state.a&&!state.a?.synthetic)||(state.b&&!state.b?.synthetic)||state.registration||state.params.some(x=>x!==0));
@@ -181,31 +181,39 @@ function render(){
 }
 function loadFiles(slot,files){
   if(!files.length)return;if(state.a?.synthetic||state.b?.synthetic)clearAll(false);if(state.regWorker)stopRegistration(false);
-  state.loadWorkers[slot]?.terminate();const worker=new Worker('./io-worker.js?v=1.1.5-zip1');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
+  if(state.zipCache?.worker===state.loadWorkers[slot])state.zipCache=null;
+  state.loadWorkers[slot]?.terminate();
+  const file=files[0],cached=state.zipCache;
+  const reuse=files.length===1&&/\.zip$/i.test(file.name)&&cached&&file.name===cached.file.name&&file.size===cached.file.size&&file.lastModified===cached.file.lastModified;
+  if(cached&&!reuse){cached.worker.terminate();state.zipCache=null;}
+  const worker=reuse?cached.worker:new Worker('./io-worker.js?v=1.1.6-zipcache1');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
   const up=slot.toUpperCase();$('label'+up).dataset.patientName='false';$('label'+up).title='';$('label'+up).textContent='Чтение файлов…';
+  let cacheable=false;
   worker.onmessage=({data})=>{
+    if(state.loadWorkers[slot]!==worker)return;
     if(data.type==='progress'){$('label'+up).textContent=data.text+' · '+Math.round(data.fraction*100)+'%';}
     if(data.type==='groups'){
+      cacheable=!!data.cachedZip;
       const choose=key=>{worker.postMessage({type:'build',key});};
       if(data.skipped)toast('Пропущено файлов: '+data.skipped+'. '+(data.errors[0]||'Объекты без PixelData.'));
       if(data.groups.length===1)choose(data.groups[0].key);
       else {
         // A second scan replaces the chooser, but does not discard either volume.
-        if(activeScan){const old=activeScan.slot;state.loadWorkers[old]?.terminate();delete state.loadWorkers[old];state.loading.delete(old);restoreSlotLabel(old);}
+        if(activeScan){const old=activeScan.slot,previous=state.loadWorkers[old];previous?.terminate();if(state.zipCache?.worker===previous)state.zipCache=null;delete state.loadWorkers[old];state.loading.delete(old);restoreSlotLabel(old);}
         activeScan={slot,choose};$('scanSummary').textContent='Для серии '+up+' найдено объёмов: '+data.groups.length+'. Выбери нужный.';$('seriesList').replaceChildren();
         for(const group of data.groups){const btn=document.createElement('button');btn.className='series-choice';const text=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('small');title.textContent=group.name;meta.textContent=group.modality+' · серия '+group.series+' · '+group.dims.join(' × ')+(group.echo?' · эхо '+group.echo:'');text.append(title,meta);btn.append(text);btn.addEventListener('click',()=>{activeScan=null;$('seriesDialog').close();choose(group.key);});$('seriesList').append(btn);}
         if(!$('seriesDialog').open)$('seriesDialog').showModal();
       }
     }
-    if(data.type==='volume'){state.loading.delete(slot);setVolume(slot,data.volume);worker.terminate();delete state.loadWorkers[slot];toast('Серия '+up+' загружена: '+data.volume.dims.join(' × '));}
+    if(data.type==='volume'){state.loading.delete(slot);setVolume(slot,data.volume);if(cacheable)state.zipCache={worker,file};else{worker.terminate();if(state.zipCache?.worker===worker)state.zipCache=null;}delete state.loadWorkers[slot];toast('Серия '+up+' загружена: '+data.volume.dims.join(' × '));}
     if(data.type==='error'){finishError(data.message);}
   };
-  function finishError(message){state.loading.delete(slot);worker.terminate();delete state.loadWorkers[slot];restoreSlotLabel(slot);updateButtons();toast(message,true);}
+  function finishError(message){state.loading.delete(slot);worker.terminate();if(state.zipCache?.worker===worker)state.zipCache=null;delete state.loadWorkers[slot];restoreSlotLabel(slot);updateButtons();toast(message,true);}
   worker.onerror=e=>finishError('Ошибка чтения DICOM: '+(e.message||'проверь формат файлов.'));
-  worker.postMessage({type:'scan',slot,files:Array.from(files)});
+  worker.postMessage({type:'scan',slot,files:Array.from(files),reuse:!!reuse});
 }
 function restoreSlotLabel(slot){const v=state[slot],label=$('label'+slot.toUpperCase());label.dataset.patientName=v&&!v.synthetic?'true':'false';label.textContent=v?(v.synthetic?'':v.name):'Не загружен';label.title=v&&!v.synthetic?v.name:'';}
-function cancelScan(){if(activeScan){const slot=activeScan.slot;state.loadWorkers[slot]?.terminate();delete state.loadWorkers[slot];state.loading.delete(slot);restoreSlotLabel(slot);activeScan=null;updateButtons();}if($('seriesDialog').open)$('seriesDialog').close();}
+function cancelScan(){if(activeScan){const slot=activeScan.slot,worker=state.loadWorkers[slot];worker?.terminate();if(state.zipCache?.worker===worker)state.zipCache=null;delete state.loadWorkers[slot];state.loading.delete(slot);restoreSlotLabel(slot);activeScan=null;updateButtons();}if($('seriesDialog').open)$('seriesDialog').close();}
 function startRegistration(){
   if(state.regWorker){stopRegistration();return;}if(!(state.a&&state.b))return;
   cancelManualMode();
@@ -230,7 +238,7 @@ function demo(){
 }
 function clearAll(announce=true){
   cancelManualMode();
-  stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;state.registrationStage='not-run';state.hasCompletedRegistration=false;
+  stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.zipCache?.worker.terminate();state.zipCache=null;state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;state.registrationStage='not-run';state.hasCompletedRegistration=false;
   for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
   $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;setRegistrationStage('volume');configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';

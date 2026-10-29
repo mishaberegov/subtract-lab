@@ -158,6 +158,50 @@ test('indexed ZIP scans headers and reads only the selected member during build'
   assert.ok(readBytes-scannedBytes<file.size,'building one series must skip other compressed members');
   assert.equal(messages.find(m=>m.type==='volume').volume.data[0],23);
 });
+test('a second slot reuses indexed ZIP headers without inflating them again',async()=>{
+  const bytes=fflate.zipSync({
+    'a.dcm':dicomSlice({uid:'2.25.80001',rows:256,cols:256,values:Array(256*256).fill(23)}),
+    'b.dcm':dicomSlice({uid:'2.25.80002',rows:256,cols:256,values:Array(256*256).fill(47)})
+  },{level:0});
+  const files=[0,1].map(()=>new File([bytes],'same-study.zip',{lastModified:1234}));
+  let reads=0;
+  for(const file of files){const slice=file.slice.bind(file);file.slice=(start,end)=>{reads+=Math.min(end,file.size)-start;return slice(start,end);};}
+  const messages=[],self={postMessage:message=>messages.push(message)};
+  vm.runInNewContext(source,{self,Uint8Array,ArrayBuffer,DataView,URL,dicomParser:parser,fflate,importScripts(){}},{filename:fileURLToPath(workerURL),importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});
+  await self.onmessage({data:{type:'scan',slot:'a',files:[files[0]]}});
+  const first=messages.find(m=>m.type==='groups');
+  assert.equal(first?.groups.length,2);
+  await self.onmessage({data:{type:'build',key:first.groups[0].key}});
+  const scanReads=reads;
+  messages.length=0;
+  await self.onmessage({data:{type:'scan',slot:'b',files:[files[1]],reuse:true}});
+  const second=messages.find(m=>m.type==='groups');
+  assert.equal(second?.groups.length,2);
+  assert.equal(second.cachedZip,true);
+  assert.equal(second.reused,true);
+  assert.ok(reads-scanReads<files[1].size/4,`second scan read too much: ${reads-scanReads}`);
+  await self.onmessage({data:{type:'build',key:second.groups[1].key}});
+  assert.equal(messages.find(m=>m.type==='error'),undefined,JSON.stringify(messages.find(m=>m.type==='error')));
+  assert.equal(messages.find(m=>m.type==='volume').volume.data[0],47);
+});
+test('ZIP with the same name, size and timestamp but different pixels must not reuse cached headers',async()=>{
+  const bytesFor=uid=>fflate.zipSync({'slice.dcm':dicomSlice({uid,values:Array(20).fill(12)})},{level:0});
+  const one=new File([bytesFor('2.25.80001')],'same.zip',{lastModified:1234});
+  const two=new File([bytesFor('2.25.80002')],'same.zip',{lastModified:1234});
+  assert.equal(one.size,two.size);
+  const messages=[],self={postMessage:message=>messages.push(message)};
+  vm.runInNewContext(source,{self,Uint8Array,ArrayBuffer,DataView,URL,dicomParser:parser,fflate,importScripts(){}},{filename:fileURLToPath(workerURL),importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});
+  await self.onmessage({data:{type:'scan',slot:'a',files:[one]}});
+  const first=messages.find(m=>m.type==='groups');
+  await self.onmessage({data:{type:'build',key:first.groups[0].key}});
+  messages.length=0;
+  await self.onmessage({data:{type:'scan',slot:'b',files:[two],reuse:true}});
+  const second=messages.find(m=>m.type==='groups');
+  assert.equal(messages.find(m=>m.type==='error'),undefined);
+  assert.equal(second?.cachedZip,true);
+  assert.equal(second.reused,false);
+  assert.notEqual(second.groups[0].key,first.groups[0].key);
+});
 test('Float Pixel Data is recognized from a header prefix without loading its pixel bytes',async()=>{
   const slice=dicomSlice({rows:256,cols:256}),beforePixel=slice.length-12-256*256*2;
   const floats=new Float32Array(256*256).fill(77.5);

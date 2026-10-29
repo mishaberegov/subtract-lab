@@ -24,7 +24,7 @@ export async function indexZip(file){
   let pos=0;
   for(let index=0;index<count;index++){
     if(pos+46>central.length||u32(view,pos)!==0x02014b50)throw Error('Повреждённый каталог ZIP.');
-    const flags=u16(view,pos+8),method=u16(view,pos+10),compressed32=u32(view,pos+20),original32=u32(view,pos+24),nameLength=u16(view,pos+28),extraLength=u16(view,pos+30),commentLength=u16(view,pos+32),offset32=u32(view,pos+42);
+    const flags=u16(view,pos+8),method=u16(view,pos+10),crc=u32(view,pos+16),compressed32=u32(view,pos+20),original32=u32(view,pos+24),nameLength=u16(view,pos+28),extraLength=u16(view,pos+30),commentLength=u16(view,pos+32),offset32=u32(view,pos+42);
     const next=pos+46+nameLength+extraLength+commentLength;
     if(next>central.length||flags&1)throw Error('Зашифрованный или повреждённый ZIP.');
     const rawName=central.subarray(pos+46,pos+46+nameLength),name=new TextDecoder(flags&2048?'utf-8':'latin1').decode(rawName);
@@ -49,7 +49,7 @@ export async function indexZip(file){
       }
       if(!found)throw Error('Отсутствует ZIP64 extra.');
     }
-    entries.push({index,name,method,flags,compressed,original,localOffset});pos=next;
+    entries.push({index,name,method,flags,crc,compressed,original,localOffset});pos=next;
   }
   return entries;
 }
