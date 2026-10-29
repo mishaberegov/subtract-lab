@@ -53,19 +53,30 @@ export function geometry(g){
   const frames=[...g.frames],first=frames[0],normal=first.norm;frames.sort((a,b)=>dot(a.ipp,normal)-dot(b.ipp,normal));
   const f=frames[0],n=frames.length,[rows,cols]=[f.rows,f.cols],u=f.iop.slice(0,3),v=f.iop.slice(3);
   for(const q of frames){if(q.rows!==rows||q.cols!==cols||q.iop.some((x,i)=>Math.abs(x-f.iop[i])>.002)||q.spacing.some((x,i)=>Math.abs(x-f.spacing[i])>.005))throw Error('В одной серии смешаны разные размеры, ориентации или PixelSpacing. Выбери одну реконструкцию.');}
-  let dz=f.norm.map(x=>x*Math.abs(f.thickness||1));
+  let dz=f.norm.map(x=>x*Math.abs(f.thickness||1)),positions=[0],outputCount=n;
   if(n>1){
-    dz=f.ipp.map((x,i)=>(frames[n-1].ipp[i]-x)/(n-1));
-    if(dot(dz,normal)<.001)throw Error('В одной позиции несколько срезов. Раздели временные точки, эхо или фазы на отдельные серии.');
+    positions=frames.map(q=>dot(q.ipp.map((x,j)=>x-f.ipp[j]),normal));
+    const gaps=positions.slice(1).map((p,i)=>p-positions[i]);
+    if(gaps.some(distance=>distance<.001))throw Error('Повторяющиеся позиции срезов: смешаны фазы/эхо либо дубликаты файлов.');
+    const sorted=[...gaps].sort((a,b)=>a-b),middle=sorted[Math.floor(sorted.length/2)];
+    if(sorted[0]<.5&&sorted[0]<middle*.2)throw Error('Повторяющиеся позиции срезов: смешаны фазы/эхо либо дубликаты файлов.');
+    const nominal=sorted[0],extent=positions[n-1];
+    // The shortest observed interval anchors the nominal step. With only two
+    // slices there is no evidence of a missing intermediate slice.
+    outputCount=Math.max(n,Math.round(extent/nominal)+1);
+    if(outputCount>10000||Math.max(...gaps)>nominal*13)throw Error('Слишком большой разрыв между срезами: интерполяция ненадёжна.');
+    dz=f.ipp.map((x,i)=>(frames[n-1].ipp[i]-x)/(outputCount-1));
+    const step=extent/(outputCount-1);
     for(let i=1;i<n;i++){
-      const distance=dot(frames[i].ipp,normal)-dot(frames[i-1].ipp,normal);
-      if(distance<.001)throw Error('Повторяющиеся позиции срезов: смешаны фазы/эхо либо дубликаты файлов.');
-      const error=Math.hypot(...frames[i].ipp.map((x,j)=>x-f.ipp[j]-i*dz[j]));
-      if(error>Math.max(.1,Math.hypot(...dz)*.03))throw Error('Неравномерный шаг или пропущенные срезы. Для вычитания нужна регулярная 3D-серия.');
+      // Do not quietly treat arbitrary in-plane motion as pure through-plane
+      // displacement. Interpolation below assumes corresponding pixels align.
+      const fraction=positions[i]/extent;
+      const transverse=frames[i].ipp.map((x,j)=>x-f.ipp[j]-fraction*(frames[n-1].ipp[j]-f.ipp[j]));
+      if(Math.hypot(...transverse)>Math.max(.1,step*.03))throw Error('Позиции срезов смещены в плоскости; без пространственного пересчёта интерполяция ненадёжна.');
     }
   }
   const matrix=[u[0]*f.spacing[1],v[0]*f.spacing[0],dz[0],u[1]*f.spacing[1],v[1]*f.spacing[0],dz[1],u[2]*f.spacing[1],v[2]*f.spacing[0],dz[2]];
-  return {frames,matrix,origin:f.ipp,dims:[cols,rows,n]};
+  return {frames,matrix,origin:f.ipp,dims:[cols,rows,outputCount],positions};
 }
 function rleDecode(bytes,rows,cols,bits){
   const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),segments=dv.getUint32(0,true),n=rows*cols,bpp=bits/8;
@@ -129,12 +140,29 @@ export async function buildVolume(g,{onProgress=()=>{},...options}={}){
   const geo=geometry(g),n=geo.dims.reduce((a,b)=>a*b,1);
   if(n>100000000)throw Error('Объём слишком большой для этой браузерной версии (лимит 100 млн вокселей на серию).');
   const data=new Float32Array(n),stride=geo.dims[0]*geo.dims[1];
-  for(let i=0;i<geo.frames.length;i++){data.set(await decodeFrame(geo.frames[i],options),i*stride);onProgress((i+1)/geo.frames.length);}
+  let interpolated=0,z=0,previous=await decodeFrame(geo.frames[0],options);
+  data.set(previous);z++;onProgress(1/geo.frames.length);
+  for(let i=1;i<geo.frames.length;i++){
+    const current=await decodeFrame(geo.frames[i],options),a=geo.positions[i-1],b=geo.positions[i];
+    while(z<geo.dims[2]){
+      const position=geo.positions.at(-1)*z/(geo.dims[2]-1);
+      if(position>b+1e-5)break;
+      if(Math.abs(position-b)<1e-5){data.set(current,z*stride);z++;continue;}
+      const fraction=(position-a)/(b-a);interpolated++;
+      for(let p=0;p<stride;p++){
+        const x=previous[p],y=current[p];
+        data[z*stride+p]=Number.isFinite(x)&&Number.isFinite(y)?x+(y-x)*fraction:NaN;
+      }
+      z++;
+    }
+    previous=current;onProgress((i+1)/geo.frames.length);
+  }
   const v={dims:geo.dims,matrix:geo.matrix,origin:geo.origin,data,name:g.name,modality:g.modality,frameUID:g.frameUID,ts:g.ts,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
   v.stats=statistics(v);
   const ds=geo.frames[0].ds,wl=scalar(ds,'x00281050',NaN),ww=scalar(ds,'x00281051',NaN);
   v.window=Number.isFinite(wl)&&ww>=1?{level:wl,width:ww}:{level:v.stats.level,width:v.stats.width};
   v.warnings=[];
+  if(interpolated)v.warnings.push(`Интерполировано срезов: ${interpolated}. Интерполяция не восстанавливает отсутствующие детали; проверь результат перед количественным анализом.`);
   if(!g.frameUID)v.warnings.push('В DICOM нет FrameOfReferenceUID: исходное совпадение координат не гарантировано.');
   if(['1.2.840.10008.1.2.4.50','1.2.840.10008.1.2.4.81','1.2.840.10008.1.2.4.91'].includes(g.ts))v.warnings.push('Серия использует сжатие с возможной потерей данных.');
   return v;

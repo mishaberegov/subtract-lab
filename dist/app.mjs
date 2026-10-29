@@ -6,7 +6,7 @@ import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.0-noangles1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.1-gaps1';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
@@ -181,7 +181,7 @@ function render(){
 }
 function loadFiles(slot,files){
   if(!files.length)return;if(state.a?.synthetic||state.b?.synthetic)clearAll(false);if(state.regWorker)stopRegistration(false);
-  state.loadWorkers[slot]?.terminate();const worker=new Worker('./io-worker.js?v=1.1.0');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
+  state.loadWorkers[slot]?.terminate();const worker=new Worker('./io-worker.js?v=1.1.1-gaps1');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
   const up=slot.toUpperCase();$('label'+up).dataset.patientName='false';$('label'+up).title='';$('label'+up).textContent='Чтение файлов…';
   worker.onmessage=({data})=>{
     if(data.type==='progress'){$('label'+up).textContent=data.text+' · '+Math.round(data.fraction*100)+'%';}

@@ -22,6 +22,12 @@ test('static strings and dynamic status/error messages translate without alterin
   assert.equal(localizeMessage('Чтение DICOM · 45%','en'),'Reading DICOM · 45%');
   assert.equal(localizeMessage('Transfer Syntax 1.2.840.10008 пока не поддерживается. Экспортируй DICOM без сжатия.','en'),'Transfer Syntax 1.2.840.10008 is not supported yet. Export uncompressed DICOM.');
 });
+test('interpolated-slice warning and remaining geometry limits are localized',()=>{
+  const message='Интерполировано срезов: 1. Интерполяция не восстанавливает отсутствующие детали; проверь результат перед количественным анализом.';
+  assert.match(localizeMessage(message,'en'),/Interpolated slices: 1/);
+  assert.doesNotMatch(localizeMessage(message,'en'),/[А-Яа-яЁё]/);
+  assert.match(localizeMessage('Слишком большой разрыв между срезами: интерполяция ненадёжна.','en'),/Gap between slices/);
+});
 test('visible language control and corrected geometry and reset zoom labels exist',()=>{
   assert.match(html,/id="languageSwitch"/);
   assert.match(html,/A · РЕФЕРЕНС<\/small>/);
