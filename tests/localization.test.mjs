@@ -22,9 +22,9 @@ test('static strings and dynamic status/error messages translate without alterin
   assert.equal(localizeMessage('Чтение DICOM · 45%','en'),'Reading DICOM · 45%');
   assert.equal(localizeMessage('Transfer Syntax 1.2.840.10008 пока не поддерживается. Экспортируй DICOM без сжатия.','en'),'Transfer Syntax 1.2.840.10008 is not supported yet. Export uncompressed DICOM.');
 });
-test('overlap and large-volume notices translate without exposing identifiers',()=>{const input='Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён; проверь стык перед количественным анализом. Большой объём: разрешение в плоскости уменьшено в 2 раза усреднением (до 256×256×719); исходные срезы по оси Z сохранены.';const result=localizeMessage(input,'en');assert.match(result,/Two sequential acquisitions overlap at one slice/);assert.match(result,/256×256×719/);assert.doesNotMatch(result,/[а-яА-ЯёЁ]/);});
+test('overlap and large-volume notices translate without exposing identifiers',()=>{const input='Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён. Большой объём: разрешение в плоскости уменьшено в 2 раза (до 256×256×719); исходные срезы по оси Z сохранены.';const result=localizeMessage(input,'en');assert.match(result,/Two sequential acquisitions overlap at one slice/);assert.match(result,/256×256×719/);assert.doesNotMatch(result,/[а-яА-ЯёЁ]/);});
 test('Float16 CT warning is visible in English without a lossless claim',()=>{
-  const message='Рабочие значения КТ сохранены в Float16 (погрешность до 1 HU); исходные DICOM не изменены. Проверяй количественное вычитание.';
+  const message='Значения конвертированы в Float16 (погрешность до 1 HU).';
   const english=localizeMessage(message,'en');
   assert.match(english,/Float16/);
   assert.match(english,/1 HU/);

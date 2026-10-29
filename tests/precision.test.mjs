@@ -15,7 +15,7 @@ test('CT stores half-size Float16 voxels with NaN and usable rescaled intensity'
   assert.ok(Number.isNaN(v.data[1]));
   assert.ok(Math.abs(sample(v,3,0,0)-36.3)<=0.125);
   assert.ok(Math.abs(difference(v.data[3],35,{level:40,width:80},{level:40,width:80},true)-1.3)<=0.125);
-  assert.match(v.warnings.join(' '),/Float16/);
+  assert.ok(v.warnings.includes('Значения конвертированы в Float16 (погрешность до 1 HU).'));
 });
 
 test('unsupported browsers, non-CT and out-of-range CT retain Float32 without partial mutation',()=>{

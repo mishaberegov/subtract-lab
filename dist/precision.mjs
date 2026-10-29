@@ -15,6 +15,6 @@ export function compactCTVolume(volume,options={}){
   }
   volume.data=half;
   volume.precision={format:'Float16',maxErrorHU};
-  (volume.warnings??=[]).push('Рабочие значения КТ сохранены в Float16 (погрешность до 1 HU); исходные DICOM не изменены. Проверяй количественное вычитание.');
+  (volume.warnings??=[]).push('Значения конвертированы в Float16 (погрешность до 1 HU).');
   return volume;
 }

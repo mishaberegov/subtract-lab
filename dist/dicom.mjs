@@ -197,8 +197,8 @@ export async function buildVolume(g,{onProgress=()=>{},...options}={}){
   const ds=geo.frames[0].ds,wl=scalar(ds,'x00281050',NaN),ww=scalar(ds,'x00281051',NaN);
   v.window=Number.isFinite(wl)&&ww>=1?{level:wl,width:ww}:{level:v.stats.level,width:v.stats.width};
   v.warnings=[];
-  if(geo.seamRemoved)v.warnings.push('Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён; проверь стык перед количественным анализом.');
-  if(factor>1)v.warnings.push(`Большой объём: разрешение в плоскости уменьшено в ${factor} раза усреднением (до ${dims.join('×')}); исходные срезы по оси Z сохранены.`);
+  if(geo.seamRemoved)v.warnings.push('Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён.');
+  if(factor>1)v.warnings.push(`Большой объём: разрешение в плоскости уменьшено в ${factor} раза (до ${dims.join('×')}); исходные срезы по оси Z сохранены.`);
   if(interpolated)v.warnings.push(`Интерполировано срезов: ${interpolated}. Интерполяция не восстанавливает отсутствующие детали; проверь результат перед количественным анализом.`);
   if(!g.frameUID)v.warnings.push('В DICOM нет FrameOfReferenceUID: исходное совпадение координат не гарантировано.');
   if(['1.2.840.10008.1.2.4.50','1.2.840.10008.1.2.4.81','1.2.840.10008.1.2.4.91'].includes(g.ts))v.warnings.push('Серия использует сжатие с возможной потерей данных.');

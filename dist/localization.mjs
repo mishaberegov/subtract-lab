@@ -40,9 +40,9 @@ Object.assign(copy,{
 'Размеры сжатого кадра не совпадают с DICOM.':'Compressed frame dimensions do not match DICOM.',
 'Длина декодированного кадра не совпадает с Rows × Columns.':'Decoded frame length does not match Rows × Columns.',
 'Объём слишком большой для этой браузерной версии (лимит 100 млн вокселей на серию).':'Volume is too large for this browser version (100 million voxels per series).',
-'Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён; проверь стык перед количественным анализом.':'Two sequential acquisitions overlap at one slice. One boundary slice was excluded; inspect the join before quantitative analysis.',
+'Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён.':'Two sequential acquisitions overlap at one slice. One boundary slice was excluded.',
 'Большой объём: разрешение в плоскости уменьшено в':'Large volume: in-plane resolution was reduced by a factor of',
-'раза усреднением (до':'using averaging (to',
+'раза (до':'(to',
 '); исходные срезы по оси Z сохранены.':'); original Z slices were preserved.',
 'Объём слишком большой даже после уменьшения плоскости среза.':'Volume is too large even after reducing in-plane resolution.',
 'Некорректный лимит объёма.':'Invalid volume limit.',
@@ -53,7 +53,9 @@ Object.assign(copy,{
 ,'В одной серии смешаны разные размеры, ориентации или PixelSpacing. Выбери одну реконструкцию.':'One series contains mixed dimensions, orientations, or PixelSpacing. Choose one reconstruction.'
 });
 Object.assign(copy,{
-'Рабочие значения КТ сохранены в Float16 (погрешность до 1 HU); исходные DICOM не изменены. Проверяй количественное вычитание.':'CT working intensities are stored in Float16 (up to 1 HU error); original DICOM files are unchanged. Review quantitative subtraction.',
+'Значения конвертированы в Float16 (погрешность до 1 HU).':'Values converted to Float16 (up to 1 HU error).',
+'Пара A/B.':'Pair A/B.',
+'Frame of Reference серий различается. Проверь совмещение и выполни корегистрацию.':'The series have different Frames of Reference. Check alignment and run registration.',
 'Ручная коррекция':'Manual alignment',
 'Прозрачность по интенсивности B':'B opacity by intensity',
 'Порог прозрачности B':'B opacity threshold',

@@ -9,7 +9,7 @@ async function codec(type){
   codecs[type]=new module[config[2]]();return codecs[type];
 }
 self.onmessage=async({data})=>{
-  const {parseFile,groupParsed,describeGroup,buildVolume}=await import('./dicom.mjs?v=1.1.1-seam1');
+  const {parseFile,groupParsed,describeGroup,buildVolume}=await import('./dicom.mjs?v=1.1.2-warnings1');
   if(busy)return;busy=true;
   try{
     if(data.type==='scan'){
@@ -64,7 +64,7 @@ self.onmessage=async({data})=>{
     }else if(data.type==='build'){
       const group=groups.find(g=>g.key===data.key);if(!group)throw Error('Серия не найдена. Выбери файлы повторно.');
       const volume=await buildVolume(group,{codec,onProgress:f=>self.postMessage({type:'progress',slot,text:'Сборка объёма',fraction:f})});
-      const {compactCTVolume}=await import('./precision.mjs?v=1.1.2-half1');
+      const {compactCTVolume}=await import('./precision.mjs?v=1.1.2-warnings1');
       compactCTVolume(volume);
       self.postMessage({type:'volume',slot,volume},[volume.data.buffer]);groups=[];
     }

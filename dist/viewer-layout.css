@@ -1,4 +1,6 @@
 /* Viewer-first layout: import belongs to each image panel, settings live below. */
+/* Keep each series' warnings on a separate line. */
+.warning-notice{white-space:pre-line}
 .app-header{height:46px;justify-content:flex-end;padding:0 30px}
 .header-right{margin-left:auto}
 .app-shell{display:flex;flex-direction:column;min-height:calc(100vh - 78px)}
