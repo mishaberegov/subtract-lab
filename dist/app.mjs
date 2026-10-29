@@ -181,7 +181,7 @@ function render(){
 }
 function loadFiles(slot,files){
   if(!files.length)return;if(state.a?.synthetic||state.b?.synthetic)clearAll(false);if(state.regWorker)stopRegistration(false);
-  state.loadWorkers[slot]?.terminate();const worker=new Worker('./io-worker.js?v=1.1.3-geometry1');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
+  state.loadWorkers[slot]?.terminate();const worker=new Worker('./io-worker.js?v=1.1.4-scan1');state.loadWorkers[slot]=worker;state.loading.add(slot);updateButtons();
   const up=slot.toUpperCase();$('label'+up).dataset.patientName='false';$('label'+up).title='';$('label'+up).textContent='Чтение файлов…';
   worker.onmessage=({data})=>{
     if(data.type==='progress'){$('label'+up).textContent=data.text+' · '+Math.round(data.fraction*100)+'%';}

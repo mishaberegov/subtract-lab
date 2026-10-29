@@ -42,3 +42,10 @@ test('rejects cumulative output before accepting a later entry',async()=>{
   const zip=fflate.zipSync({'first.dcm':new Uint8Array(800),'second.dcm':new Uint8Array(800)});
   assert.match(error(await scan(zip)),/Распакованный ZIP слишком большой/);
 });
+test('multiple ZIP files share the same cumulative output budget',async()=>{
+  const zip=fflate.zipSync({'slice.dcm':new Uint8Array(800)});
+  const messages=[],self={postMessage:m=>messages.push(m)};
+  vm.runInNewContext(boundedSource,{self,Uint8Array,ArrayBuffer,DataView,URL,fflate,importScripts(){}},{filename:fileURLToPath(workerURL),importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});
+  await self.onmessage({data:{type:'scan',slot:'test',files:[new File([zip],'first.zip'),new File([zip],'second.zip')]}});
+  assert.match(error(messages),/Распакованный ZIP слишком большой/);
+});

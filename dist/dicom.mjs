@@ -16,8 +16,18 @@ export function inflateDicomDataset(data,pos,limit=500e6){
   let cursor=pos;for(const chunk of chunks){out.set(chunk,cursor);cursor+=chunk.length;}
   return out;
 }
-export function parseFile(bytes,name,parser=globalThis.dicomParser){
-  const ds=parser.parseDicom(bytes,{inflater:inflateDicomDataset});
+export function parseFile(bytes,name,parser=globalThis.dicomParser,metadataOnly=false){
+  let ds;
+  if(metadataOnly){
+    let lastError;
+    for(const untilTag of ['x7fe00010','x7fe00008','x7fe00009']){
+      try{
+        const candidate=parser.parseDicom(bytes,{inflater:inflateDicomDataset,untilTag});
+        if(candidate.elements.x7fe00010||candidate.elements.x7fe00008||candidate.elements.x7fe00009){ds=candidate;break;}
+      }catch(e){lastError=e;}
+    }
+    if(!ds)throw lastError||Error('Не найден конец DICOM-заголовка до PixelData.');
+  }else ds=parser.parseDicom(bytes,{inflater:inflateDicomDataset});
   if(!ds.elements.x7fe00010&&!ds.elements.x7fe00008&&!ds.elements.x7fe00009)return null;
   if((ds.string('x00080008')||'').includes('MOSAIC'))throw Error('Siemens MOSAIC нужно экспортировать отдельными срезами или Enhanced DICOM.');
   if(ds.elements.x00283000)throw Error('Modality LUT пока не поддерживается. Нужен экспорт с Rescale Slope/Intercept.');
