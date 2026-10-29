@@ -6,6 +6,22 @@ test('DICOM slices sort by physical position, with rescale and anisotropic spaci
 test('Big Endian and signed 12-bit data decode exactly',async()=>{const values=[-2048,-1,0,2047,...Array(16).fill(44)].map(x=>x&4095);for(const little of [true,false]){const v=await buildVolume(group({little,signed:true,bitsStored:12,highBit:11,values}),{parser});assert.deepEqual(Array.from(v.data.slice(0,4)),[-2048,-1,0,2047]);}});
 test('padding is masked instead of treated as physical intensity',async()=>{const v=await buildVolume(group({values:Array(20).fill(7).map((v,i)=>i===0?-2000:v),signed:true,padding:-2000}),{parser});assert.ok(Number.isNaN(v.data[0]));assert.equal(v.data[1],7);});
 test('one missing slice is interpolated on a physical regular grid while originals remain exact',async()=>{const g=groupParsed([0,1,3].map(z=>parseFile(dicomSlice({z,values:Array(20).fill(10*z)}),'slice'+z,parser)))[0];const v=await buildVolume(g,{parser});assert.deepEqual(v.dims,[5,4,4]);assert.equal(v.matrix[8],2);assert.deepEqual([v.data[0],v.data[20],v.data[40],v.data[60]],[0,10,20,30]);assert.match(v.warnings.join(' '),/Интерполировано срезов: 1/);});
+test('DICOM position rounding keeps original slices and does not warn about invented interpolation',async()=>{
+  const positions=[0,.60004,1.19995,1.80003];
+  const g=groupParsed(positions.map((position,i)=>parseFile(dicomSlice({z:i,origin:[0,0,position],values:Array(20).fill(5+10*i)}),'slice'+i,parser)))[0];
+  const v=await buildVolume(g,{parser});
+  assert.deepEqual(v.dims,[5,4,4]);
+  assert.deepEqual([v.data[0],v.data[20],v.data[40],v.data[60]],[5,15,25,35]);
+  assert.doesNotMatch(v.warnings.join(' '),/Интерполировано срезов/);
+});
+test('meaningful irregular positions still interpolate and warn',async()=>{
+  const positions=[0,1.1,2];
+  const g=groupParsed(positions.map((position,i)=>parseFile(dicomSlice({z:i,origin:[0,0,position],values:Array(20).fill(i*110)}),'slice'+i,parser)))[0];
+  const v=await buildVolume(g,{parser});
+  assert.deepEqual(v.dims,[5,4,3]);
+  assert.ok(Math.abs(v.data[20]-100)<1e-4);
+  assert.match(v.warnings.join(' '),/Интерполировано срезов: 1/);
+});
 test('irregular physical intervals are resampled without treating noninteger gaps as whole missing slices',async()=>{const g=groupParsed([0,2.3,4].map((z,i)=>parseFile(dicomSlice({z:i,origin:[0,0,z],values:Array(20).fill(z*10)}),'slice'+i,parser)))[0];const v=await buildVolume(g,{parser});assert.deepEqual(v.dims,[5,4,3]);assert.ok(Math.abs(v.matrix[8]-2)<1e-6);assert.ok(Math.abs(v.data[20]-20)<1e-5);assert.equal(v.data[40],40);});
 test('duplicates still fail, and a huge discontinuity is not silently fabricated',async()=>{const h=group();h.frames.push(h.frames[0]);assert.throws(()=>geometry(h),/Повторяющиеся|несколько/);const almost=groupParsed([0,0.01,2,4].map((z,i)=>parseFile(dicomSlice({z:i,origin:[0,0,z]}),'slice'+i,parser)))[0];assert.throws(()=>geometry(almost),/Повторяющиеся/);const g=groupParsed([0,1,30].map(z=>parseFile(dicomSlice({z}),'slice'+z,parser)))[0];await assert.rejects(buildVolume(g,{parser}),/слишком большой|разрыв/);});
 test('interpolation keeps padding unknown rather than blending it into tissue',async()=>{const g=groupParsed([0,1,3].map(z=>parseFile(dicomSlice({z,signed:true,padding:-2000,values:Array(20).fill(z===1?-2000:100)}),'slice'+z,parser)))[0];const v=await buildVolume(g,{parser});assert.ok(Number.isNaN(v.data[40]));assert.equal(v.data[60],100);});

@@ -9,7 +9,7 @@ async function codec(type){
   codecs[type]=new module[config[2]]();return codecs[type];
 }
 self.onmessage=async({data})=>{
-  const {parseFile,groupParsed,describeGroup,buildVolume}=await import('./dicom.mjs?v=1.1.2-warnings1');
+  const {parseFile,groupParsed,describeGroup,buildVolume}=await import('./dicom.mjs?v=1.1.3-geometry1');
   if(busy)return;busy=true;
   try{
     if(data.type==='scan'){

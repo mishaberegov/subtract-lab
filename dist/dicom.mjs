@@ -175,14 +175,15 @@ export async function buildVolume(g,{onProgress=()=>{},...options}={}){
     }
     return reduced;
   };
+  const positionTolerance=depth>1?Math.min(0.01,geo.positions.at(-1)/(depth-1)*0.01):0;
   let interpolated=0,z=0,previous=reduceFrame(await decodeFrame(geo.frames[0],options));
   data.set(previous);z++;onProgress(1/geo.frames.length);
   for(let i=1;i<geo.frames.length;i++){
     const current=reduceFrame(await decodeFrame(geo.frames[i],options)),a=geo.positions[i-1],b=geo.positions[i];
     while(z<geo.dims[2]){
       const position=geo.positions.at(-1)*z/(geo.dims[2]-1);
-      if(position>b+1e-5)break;
-      if(Math.abs(position-b)<1e-5){data.set(current,z*stride);z++;continue;}
+      if(position>b+positionTolerance)break;
+      if(Math.abs(position-b)<=positionTolerance){data.set(current,z*stride);z++;continue;}
       const fraction=(position-a)/(b-a);interpolated++;
       for(let p=0;p<stride;p++){
         const x=previous[p],y=current[p];
