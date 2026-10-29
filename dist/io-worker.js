@@ -1,5 +1,5 @@
 importScripts('./vendor/dicomParser.min.js','./vendor/fflate.js');
-let groups=[],slot='',busy=false;
+let groups=[],slot='',busy=false,zipIndices=new Map();
 const codecs={};
 async function previewFile(file,parseFile){
   let length=Math.min(file.size,65536);
@@ -36,18 +36,18 @@ async function readZip(file,handler,budget={total:0}){
     }
   }
 }
-function collectHeader(parseFile,name,done){
-  let chunks=[],length=0,nextAttempt=65536,preview=null;
+function collectHeader(parseFile,name,done,initial=65536){
+  let chunks=[],length=0,nextAttempt=initial,preview=null;
   return (chunk,final)=>{
-    if(preview!==null)return;
+    if(preview!==null)return true;
     const take=Math.min(chunk.length,64e6-length);
     if(take){chunks.push(chunk.subarray(0,take).slice());length+=take;}
-    if(length<nextAttempt&&!final&&length<64e6)return;
+    if(length<nextAttempt&&!final&&length<64e6)return false;
     const bytes=new Uint8Array(length);let offset=0;
     for(const part of chunks){bytes.set(part,offset);offset+=part.length;}
     try{preview=parseFile(bytes,name,undefined,true);}
-    catch(e){if(final||length>=64e6){done(null,e);preview=false;return;}nextAttempt=Math.min(64e6,Math.max(nextAttempt*2,length+1));return;}
-    chunks=[];done(preview,null);if(preview===null)preview=false;
+    catch(e){if(final||length>=64e6){done(null,e);preview=false;return true;}nextAttempt=Math.min(64e6,Math.max(nextAttempt*2,length+1));return false;}
+    chunks=[];done(preview,null);if(preview===null)preview=false;return true;
   };
 }
 async function codec(type){
@@ -59,10 +59,11 @@ async function codec(type){
 }
 self.onmessage=async({data})=>{
   const {parseFile,groupParsed,describeGroup,buildVolume}=await import('./dicom.mjs?v=1.1.4-scan1');
+  const {indexZip,readIndexedEntry}=await import('./zip-index.mjs?v=1.1.5-zip1');
   if(busy)return;busy=true;
   try{
     if(data.type==='scan'){
-      groups=[];slot=data.slot;let parsed=[],errors=[],skipped=0,total=0;const budget={total:0};
+      groups=[];zipIndices=new Map();slot=data.slot;let parsed=[],errors=[],skipped=0,total=0,declared=0;const budget={total:0};
       const add=(p,source,name,error)=>{
         if(p){p.frames=p.frames.map(f=>({cols:f.cols,rows:f.rows,source}));parsed.push(p);}
         else{skipped++;if(error&&errors.length<5)errors.push(name+': '+(error.message||error));}
@@ -71,7 +72,19 @@ self.onmessage=async({data})=>{
         const file=data.files[i];
         total+=file.size;if(total>1.5e9)throw Error('Суммарный размер файлов больше 1.5 ГБ. Выбери одну серию.');
         if(/\.zip$/i.test(file.name)){
-          await readZip(file,(name,index)=>collectHeader(parseFile,name,(p,error)=>add(p,{zipFile:file,entryIndex:index},name,error)),budget);
+          let indexed;
+          try{indexed=await indexZip(file);}catch(e){if(/каталог|ZIP64|Многотомный/.test(e.message))indexed=null;else throw e;}
+          if(indexed){
+            zipIndices.set(file,indexed);
+            for(const entry of indexed){
+              const name=entry.name;
+              if(name.endsWith('/')||name.includes('__MACOSX')||/\.(jpg|png|pdf|txt|xml|html|exe|dll)$/i.test(name))continue;
+              if(entry.original>600e6)throw Error('Слишком большой файл внутри ZIP.');
+              declared+=entry.original;if(declared>2e9)throw Error('Распакованный ZIP слишком большой.');
+              const collect=collectHeader(parseFile,name,(p,error)=>add(p,{zipFile:file,entryIndex:entry.index},name,error),4096);
+              await readIndexedEntry(file,entry,collect,{budget,prefixOnly:true});
+            }
+          }else await readZip(file,(name,index)=>collectHeader(parseFile,name,(p,error)=>add(p,{zipFile:file,entryIndex:index},name,error)),budget);
         }else{
           try{add(await previewFile(file,parseFile),file,file.name);}
           catch(e){add(null,file,file.name,e);}
@@ -91,7 +104,16 @@ self.onmessage=async({data})=>{
       }
       const buildBudget={total:0};
       for(const [zipFile,indices] of zipFiles){
-        await readZip(zipFile,(name,index)=>{
+        const indexed=zipIndices.get(zipFile);
+        if(indexed){
+          for(const entry of indexed){
+            if(!indices.has(entry.index))continue;
+            const chunks=[];let length=0;
+            await readIndexedEntry(zipFile,entry,(chunk)=>{if(chunk.length){chunks.push(chunk.slice());length+=chunk.length;}return false;},{budget:buildBudget});
+            const bytes=new Uint8Array(length);let offset=0;for(const part of chunks){bytes.set(part,offset);offset+=part.length;}
+            parsed.push(parseFile(bytes,entry.name));
+          }
+        }else await readZip(zipFile,(name,index)=>{
           if(!indices.has(index))return ()=>{};
           let chunks=[],length=0;
           return (chunk,final)=>{
@@ -105,7 +127,7 @@ self.onmessage=async({data})=>{
       const volume=await buildVolume(selected,{codec,onProgress:f=>self.postMessage({type:'progress',slot,text:'Сборка объёма',fraction:f})});
       const {compactCTVolume}=await import('./precision.mjs?v=1.1.2-warnings1');
       compactCTVolume(volume);
-      self.postMessage({type:'volume',slot,volume},[volume.data.buffer]);groups=[];
+      self.postMessage({type:'volume',slot,volume},[volume.data.buffer]);groups=[];zipIndices.clear();
     }
   }catch(e){self.postMessage({type:'error',slot,message:e.message||String(e)});}finally{busy=false;}
 };

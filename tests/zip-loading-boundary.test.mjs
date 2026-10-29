@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import * as fflate from 'fflate';
+globalThis.fflate=fflate;
 
 const workerURL=new URL('../dist/io-worker.js',import.meta.url);
 const source=await readFile(workerURL,'utf8');

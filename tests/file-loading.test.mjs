@@ -138,6 +138,26 @@ test('ZIP entries with duplicate names do not mix unrelated series on selection'
   assert.equal(messages.find(m=>m.type==='error'),undefined,JSON.stringify(messages.find(m=>m.type==='error')));
   assert.equal(messages.find(m=>m.type==='volume').volume.data[0],11);
 });
+test('indexed ZIP scans headers and reads only the selected member during build',async()=>{
+  const zipBytes=fflate.zipSync({
+    'one.dcm':dicomSlice({uid:'2.25.40001',rows:256,cols:256,values:Array(256*256).fill(23)}),
+    'two.dcm':dicomSlice({uid:'2.25.40002',rows:256,cols:256,values:Array(256*256).fill(47)})
+  },{level:0});
+  const file=new File([zipBytes],'indexed.zip');let readBytes=0;
+  const slice=file.slice.bind(file);
+  file.slice=(start,end)=>{readBytes+=Math.min(end,file.size)-start;return slice(start,end);};
+  const messages=[],self={postMessage:message=>messages.push(message)};
+  vm.runInNewContext(source,{self,Uint8Array,ArrayBuffer,DataView,URL,dicomParser:parser,fflate,importScripts(){}},{filename:fileURLToPath(workerURL),importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});
+  await self.onmessage({data:{type:'scan',slot:'a',files:[file]}});
+  const groups=messages.find(m=>m.type==='groups');
+  assert.equal(groups?.groups.length,2);
+  assert.ok(readBytes<65557+file.size/5,`header scan read too much compressed pixel data: ${readBytes}`);
+  const scannedBytes=readBytes;
+  await self.onmessage({data:{type:'build',key:groups.groups[0].key}});
+  assert.equal(messages.find(m=>m.type==='error'),undefined,JSON.stringify(messages.find(m=>m.type==='error')));
+  assert.ok(readBytes-scannedBytes<file.size,'building one series must skip other compressed members');
+  assert.equal(messages.find(m=>m.type==='volume').volume.data[0],23);
+});
 test('Float Pixel Data is recognized from a header prefix without loading its pixel bytes',async()=>{
   const slice=dicomSlice({rows:256,cols:256}),beforePixel=slice.length-12-256*256*2;
   const floats=new Float32Array(256*256).fill(77.5);
