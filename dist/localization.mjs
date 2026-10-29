@@ -53,6 +53,7 @@ Object.assign(copy,{
 ,'В одной серии смешаны разные размеры, ориентации или PixelSpacing. Выбери одну реконструкцию.':'One series contains mixed dimensions, orientations, or PixelSpacing. Choose one reconstruction.'
 });
 Object.assign(copy,{
+'Рабочие значения КТ сохранены в Float16 (погрешность до 1 HU); исходные DICOM не изменены. Проверяй количественное вычитание.':'CT working intensities are stored in Float16 (up to 1 HU error); original DICOM files are unchanged. Review quantitative subtraction.',
 'Ручная коррекция':'Manual alignment',
 'Прозрачность по интенсивности B':'B opacity by intensity',
 'Порог прозрачности B':'B opacity threshold',

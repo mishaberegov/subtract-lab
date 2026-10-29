@@ -64,6 +64,8 @@ self.onmessage=async({data})=>{
     }else if(data.type==='build'){
       const group=groups.find(g=>g.key===data.key);if(!group)throw Error('Серия не найдена. Выбери файлы повторно.');
       const volume=await buildVolume(group,{codec,onProgress:f=>self.postMessage({type:'progress',slot,text:'Сборка объёма',fraction:f})});
+      const {compactCTVolume}=await import('./precision.mjs?v=1.1.2-half1');
+      compactCTVolume(volume);
       self.postMessage({type:'volume',slot,volume},[volume.data.buffer]);groups=[];
     }
   }catch(e){self.postMessage({type:'error',slot,message:e.message||String(e)});}finally{busy=false;}
