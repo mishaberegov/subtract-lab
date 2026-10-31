@@ -32,7 +32,10 @@
 .viewport-pickers button:hover{border-color:var(--accent);color:var(--accent)}
 .viewport-pickers svg{width:13px;height:13px;flex:none}
 .canvas-wrap{height:clamp(300px,34vw,560px)}
-.series-date{position:absolute;top:10px;right:10px;z-index:2;max-width:calc(100% - 50px);padding:4px 7px;border-radius:4px;background:#091319d9;color:#d1e1df;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.series-date{position:absolute;top:10px;right:10px;z-index:2;display:grid;gap:2px;max-width:calc(100% - 50px);padding:4px 7px;border-radius:4px;background:#091319d9;color:#d1e1df;font-size:11px;line-height:1.3;white-space:nowrap}
+.series-date[hidden]{display:none}
+.series-date .series-name{overflow:hidden;text-overflow:ellipsis}
+.series-date .date-text{color:#98a9ab}
 .canvas-wrap.reveal-active{cursor:crosshair}
 .canvas-wrap.manual-active{cursor:grab}
 .canvas-wrap.manual-active:active{cursor:grabbing}

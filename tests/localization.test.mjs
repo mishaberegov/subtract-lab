@@ -5,6 +5,12 @@ import {languageFromUrl,languageUrl,translate,staticEnglish,localizeMessage,copy
 const html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
 const app=readFileSync(new URL('../dist/app.mjs',import.meta.url),'utf8');
 
+test('help distinguishes B-only display outside A from A-grid subtraction',()=>{
+  assert.match(html,/Вне сетки A окно B показывает исходную серию/);
+  const ru=html.match(/<p><b>Ресэмплинг B → A\.<\/b> ([^<]*)<\/p>/)?.[1];
+  assert.ok(ru);
+  assert.match(staticEnglish(ru),/Outside the A grid, the B viewer displays the original series/);
+});
 test('English is default and only lang=ru selects Russian',()=>{
   assert.equal(languageFromUrl('https://example.org/subtract-lab/?foo=1'),'en');
   assert.equal(languageFromUrl('https://example.org/subtract-lab/?lang=ru'),'ru');

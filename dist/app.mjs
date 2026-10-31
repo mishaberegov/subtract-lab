@@ -2,11 +2,12 @@ import {clamp,center,rotation,samplingMap,mapped,sample,windowValue,difference,m
 import {gridSpacing} from './resampling.mjs';
 import {makeNiftiHeader} from './nifti.mjs';
 import {sourcePlane,planeMapping} from './orientation.mjs';
+import {displayExtent,displayPlane} from './display-grid.mjs?v=1.1.7-grid1';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.2-warnings1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.7-grid1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.2-warnings1';
 import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date2';
 const $=id=>document.getElementById(id);
@@ -79,10 +80,11 @@ function resetRegistration(event='reset'){
   if(state.regWorker)stopRegistration(false);
   state.params=[0,0,0,0,0,0];state.registration=null;$('registrationReport').hidden=true;
   setRegistrationStage(event);
-  scheduleResampling();
+  configureSlice();updateWarnings();scheduleResampling();
 }
 function updateWarnings(){
   const warnings=formatWarningLines(state.a,state.b,state.demo);
+  if(state.a&&state.b&&displayExtent(state.a,state.b,state.params,state.plane).limited)warnings.push(language==='ru'?'Серии слишком далеко друг от друга для общего окна; B вне сетки A не показана.':'Series are too far apart for a shared view; B outside the A grid is not shown.');
   $('warningNotice').hidden=!warnings.length;$('warningNotice').textContent=warnings.join('\n');
 }
 function setVolume(slot,volume){
@@ -92,27 +94,28 @@ function setVolume(slot,volume){
   state.windows[slot]={...volume.window};const up=slot.toUpperCase();
   $('wl'+up).value=Number(volume.window.level.toFixed(2));$('ww'+up).value=Number(volume.window.width.toFixed(2));
   const label=$('label'+up);label.dataset.patientName=volume.synthetic?'false':'true';label.textContent=volume.synthetic?'':volume.name;label.title=volume.synthetic?'':volume.name;$('dot'+up).classList.add('loaded');
-  const date=$('date'+up);date.hidden=!!volume.synthetic;date.textContent=volume.synthetic?'':formatSeriesDate(volume,language);date.title=volume.synthetic?'':seriesDateSource(volume,language);
+  const date=$('date'+up);date.hidden=!!volume.synthetic;date.replaceChildren();if(!volume.synthetic){const name=document.createElement('span'),dateText=document.createElement('span');name.className='series-name';name.textContent=volume.name;name.title=volume.name;dateText.className='date-text';dateText.textContent=formatSeriesDate(volume,language);dateText.title=seriesDateSource(volume,language);date.replaceChildren(name,dateText);}
   resetRegistration('volume');resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
 
 }
 function resetView(){state.zoom=1;const v=state.a||state.b;if(v)state.slice=Math.floor(sliceCount(v)/2);configureSlice();requestRender();}
 function sliceCount(v){return v.dims[planeMapping(v,state.plane,0).normalAxis];}
-function configureSlice(){const v=state.a||state.b;if(!v){$('sliceSlider').disabled=true;$('sliceSlider').max=0;$('sliceNumber').textContent='— / —';return;}const n=sliceCount(v);state.slice=clamp(Math.round(state.slice),0,n-1);$('sliceSlider').disabled=false;$('sliceSlider').max=n-1;$('sliceSlider').value=state.slice;$('sliceNumber').textContent=(state.slice+1)+' / '+n;}
+function viewExtent(){return state.a?displayExtent(state.a,state.b,state.params,state.plane):state.b?displayExtent(state.b,null,state.params,state.plane):null;}
+function configureSlice(){const extent=viewExtent();if(!extent){$('sliceSlider').disabled=true;$('sliceSlider').min=0;$('sliceSlider').max=0;$('sliceNumber').textContent='— / —';return;}state.slice=clamp(Math.round(state.slice),extent.min,extent.max);$('sliceSlider').disabled=false;$('sliceSlider').min=extent.min;$('sliceSlider').max=extent.max;$('sliceSlider').value=state.slice;$('sliceNumber').textContent=(state.slice-extent.min+1)+' / '+(extent.max-extent.min+1);}
 function stepSlice(delta){if(!(state.a||state.b))return;state.slice+=delta;configureSlice();requestRender();}
 function requestRender(){if(!renderFrame)renderFrame=requestAnimationFrame(()=>{renderFrame=null;render();});}
 function planeInfo(v){
-  return planeMapping(v,state.plane,state.slice);
+  const extent=viewExtent();return extent?displayPlane(v,state.plane,state.slice,extent):planeMapping(v,state.plane,state.slice);
 }
 function orientationLabel(direction){const names=[['R','L'],['A','P'],['I','S']];return direction.map((v,i)=>({v:Math.abs(v),s:names[i][v>=0?1:0]})).filter(o=>o.v>Math.max(...direction.map(Math.abs))*.2).sort((a,b)=>b.v-a.v).map(o=>o.s).join('');}
 const canvases={a:$('canvasA'),b:$('canvasB'),r:$('canvasR')},offscreen={};
-let manualFrame=0,previewShift={x:0,y:0},previewAngle=0;
+let manualFrame=0,previewShift={x:0,y:0},previewAngle=0,previewPlane=null;
 for(const key of ['a','b','r','fusion'])offscreen[key]=document.createElement('canvas');
 function renderManualPreview(){
   manualFrame=0;
   if(!state.manualDragging||!state.bOnA)return;
-  const canvas=canvases.r,ctx=canvas.getContext('2d'),bounds=imageBounds(canvas,planeInfo(state.a),state.zoom);
+  const canvas=canvases.r,ctx=canvas.getContext('2d'),bounds=imageBounds(canvas,previewPlane||planeInfo(state.a),state.zoom);
   ctx.fillStyle='#090909';ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.save();ctx.beginPath();ctx.rect(bounds.x,bounds.y,bounds.w,bounds.h);ctx.clip();
   ctx.imageSmoothingEnabled=true;ctx.drawImage(offscreen.a,bounds.x,bounds.y,bounds.w,bounds.h);
@@ -145,7 +148,7 @@ function render(){
   const raw=$('subtractionMode').value==='raw',weight=clamp(Number($('weight').value)||0,0,10),sign=Number($('sign').value),gain=Number($('resultGain').value),scale=Math.max(.001,Number($('rawScale').value)||1),palette=$('palette').value,windowSize=Number($('windowSize').value)/100;
   const fusionOpacity=clamp(gain/4,0,1),fusionThreshold=Number($('fusionThreshold').value)/100,variableAlpha=$('fusionVariableAlpha').checked;
   for(let v=0;v<pi.h;v++)for(let u=0;u<pi.w;u++){
-    const p=pi.voxel(u,v),i=(v*pi.w+u)*4,ai=(p[2]*ny+p[1])*nx+p[0],av=state.a?state.a.data[ai]:NaN,bv=state.bOnA?state.bOnA.data[ai]:state.b?(map?sample(state.b,...mapped(map,...p)):state.b.data[ai]):NaN;
+    const p=pi.voxel(u,v),i=(v*pi.w+u)*4,insideA=!!state.a&&p.every((v,i)=>v>=0&&v<state.a.dims[i]),ai=(p[2]*ny+p[1])*nx+p[0],av=insideA?state.a.data[ai]:NaN,bv=state.b?state.a?(insideA&&state.bOnA?state.bOnA.data[ai]:sample(state.b,...mapped(map,...p))):state.b.data[ai]:NaN;
     const wa=windowValue(av,state.windows.a.level,state.windows.a.width),wb=windowValue(bv,state.windows.b.level,state.windows.b.width);
     for(const [key,value]of [['a',wa],['b',wb]]){const d=images[key].data,g=Number.isFinite(value)?Math.round(value*255):9;d[i]=d[i+1]=d[i+2]=g;d[i+3]=255;}
     const d=images.r.data;d[i+3]=255;
@@ -224,7 +227,7 @@ function startRegistration(){
   worker.onmessage=({data})=>{
     if(data.type==='progress'){$('regProgress').firstElementChild.style.width=Math.max(2,Math.round(data.fraction*100))+'%';regStatus('Уровень '+data.level+' / '+data.levels+' · '+Math.round(data.fraction*100)+'%');}
     if(data.type==='done'){
-      state.params=data.result.params;state.registration=data.result;stopRegistration(false);scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
+      state.params=data.result.params;state.registration=data.result;stopRegistration(false);configureSlice();updateWarnings();scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
       setRegistrationStage('success',good?'success':'warning');
       $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выборки '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+(good?'Проверь границы в режиме «Форточка».':'Совмещение требует визуальной проверки; при необходимости уточни вручную.');
       requestRender();
@@ -284,7 +287,7 @@ document.querySelectorAll('[data-auto]').forEach(btn=>btn.addEventListener('clic
 $('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state.regWorker)stopRegistration(false);if($('manualMode').checked)document.querySelector('[data-display="blend"]').click();$('manualHint').hidden=!$('manualMode').checked;document.querySelectorAll('[data-rotate-handle]').forEach(h=>h.hidden=!$('manualMode').checked);canvases.r.parentElement.classList.toggle('manual-active',$('manualMode').checked);updateButtons();});
 $('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('registrationReport').hidden=true;});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
-document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();}));
+document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();updateWarnings();}));
 function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':format(Number($('resultGain').value),1)+'×';}
 document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='blend'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Макс. непрозрачность B':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
@@ -304,12 +307,12 @@ for(const key of ['a','b','r']){
     const corner=!!e.target.closest('[data-rotate-handle]');
     const centreBounds=imageBounds(canvas,planeInfo(state.a),state.zoom);
     drag={manual:true,rotation:corner,centre:{x:centreBounds.x+centreBounds.w/2,y:centreBounds.y+centreBounds.h/2},start,params:[...state.params],canvasSize:{width:canvas.width,height:canvas.height},plane:planeInfo(state.a),zoom:state.zoom,pointerId:e.pointerId,changed:false};
-    previewAngle=0;previewShift={x:0,y:0};
+    previewAngle=0;previewShift={x:0,y:0};previewPlane=drag.plane;
     stopResampling();state.manualDragging=true;updateButtons();wrap.setPointerCapture(e.pointerId);return;
   }drag={x:e.clientX,y:e.clientY,wl:state.windows[key]?.level,ww:state.windows[key]?.width,zoom:state.zoom,shift:e.shiftKey,pointerId:e.pointerId};wrap.setPointerCapture(e.pointerId);if(!e.shiftKey)moveWindow(e);});
   wrap.addEventListener('pointermove',e=>{if(drag?.manual){if(drag.pointerId!==e.pointerId||!state.manualDragging)return;const canvas=canvases.r,rect=canvas.getBoundingClientRect(),end={x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height};if(drag.rotation){const degrees=rotationDragDegrees(drag.start,end,drag.centre);state.params=rotateInPlane(drag.params,drag.plane,degrees);previewAngle=degrees;previewShift={x:0,y:0};drag.changed=drag.changed||Math.abs(degrees)>0;}else{state.params=dragTranslation(drag.params,drag.start,end,drag.canvasSize,drag.plane,drag.zoom);previewShift={x:end.x-drag.start.x,y:end.y-drag.start.y};previewAngle=0;drag.changed=drag.changed||Math.hypot(previewShift.x,previewShift.y)>0;}if(!manualFrame)manualFrame=requestAnimationFrame(renderManualPreview);return;}if(key==='r'&&state.display==='window'&&!$('manualMode').checked&&!e.shiftKey&&(e.pointerType==='mouse'||drag))moveWindow(e);if(!drag||drag.pointerId!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(drag.shift){state.zoom=clamp(drag.zoom*Math.exp(-dy*.008),.2,6);}else if(key!=='r'&&state[key]){const step=Math.max(1,state[key].stats.width)/250;state.windows[key]={level:drag.wl+dy*step,width:Math.max(1,drag.ww+dx*step)};$('wl'+key.toUpperCase()).value=Math.round(state.windows[key].level);$('ww'+key.toUpperCase()).value=Math.round(state.windows[key].width);}requestRender();});
-  wrap.addEventListener('pointerup',e=>{if(!drag||drag.pointerId!==e.pointerId)return;if(drag.manual&&state.manualDragging){state.manualDragging=false;if(manualFrame){cancelAnimationFrame(manualFrame);manualFrame=0;}if(drag.changed)invalidateRegistration();scheduleResampling();updateButtons();}drag=null;});
-  wrap.addEventListener('pointercancel',e=>{if(!drag||drag.pointerId!==e.pointerId)return;if(drag.manual&&state.manualDragging){state.params=drag.params;state.manualDragging=false;if(manualFrame){cancelAnimationFrame(manualFrame);manualFrame=0;}scheduleResampling();updateButtons();}drag=null;});
+  wrap.addEventListener('pointerup',e=>{if(!drag||drag.pointerId!==e.pointerId)return;if(drag.manual&&state.manualDragging){state.manualDragging=false;previewPlane=null;if(manualFrame){cancelAnimationFrame(manualFrame);manualFrame=0;}if(drag.changed)invalidateRegistration();configureSlice();updateWarnings();scheduleResampling();updateButtons();}drag=null;});
+  wrap.addEventListener('pointercancel',e=>{if(!drag||drag.pointerId!==e.pointerId)return;if(drag.manual&&state.manualDragging){state.params=drag.params;state.manualDragging=false;previewPlane=null;if(manualFrame){cancelAnimationFrame(manualFrame);manualFrame=0;}configureSlice();updateWarnings();scheduleResampling();updateButtons();}drag=null;});
 }
 document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)||document.querySelector('dialog[open]'))return;if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();stepSlice(e.key==='ArrowUp'?-1:1);}});
 new ResizeObserver(requestRender).observe(document.querySelector('.viewers'));
