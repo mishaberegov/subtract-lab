@@ -26,6 +26,12 @@ test('averaging lives next to manual alignment and is hidden outside difference'
   assert.match(app,/\$\('slabControl'\)\.hidden=state\.display!=='difference'/);
   assert.doesNotMatch(html.match(/<div class="slice-navigation">[\s\S]*?<div class="workspace-bottom">/)?.[0]||'',/id="resultSlab"/);
 });
+test('result toolbar reserves its height and centers the averaging control',()=>{
+  const css=readFileSync(new URL('../dist/viewer-layout.css',import.meta.url),'utf8');
+  assert.match(css,/\.manual-toolbar\{[^}]*display:grid;[^}]*grid-template-columns:auto minmax\(0,1fr\) auto;[^}]*height:43px/);
+  assert.match(css,/\.slab-control\{[^}]*justify-self:center/);
+  assert.match(css,/@media\(max-width:400px\)\{\.manual-toolbar\{[^}]*height:80px/);
+});
 test('result-only slab is selectable in three modes and does not change NIfTI or registration',()=>{
   assert.match(html,/id="resultSlab"[^>]*>[\s\S]*?value="1"[\s\S]*?value="3"[\s\S]*?value="5"/);
   assert.match(app,/state\.display==='difference'&&slabCount>1\?averageResultSlab\(/);
