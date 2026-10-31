@@ -8,7 +8,7 @@ import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
 import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.2-warnings1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.2-warnings1';
-import {formatSeriesDate} from './series-date.mjs?v=1.1.7-date1';
+import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date2';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
@@ -92,7 +92,7 @@ function setVolume(slot,volume){
   state.windows[slot]={...volume.window};const up=slot.toUpperCase();
   $('wl'+up).value=Number(volume.window.level.toFixed(2));$('ww'+up).value=Number(volume.window.width.toFixed(2));
   const label=$('label'+up);label.dataset.patientName=volume.synthetic?'false':'true';label.textContent=volume.synthetic?'':volume.name;label.title=volume.synthetic?'':volume.name;$('dot'+up).classList.add('loaded');
-  const date=$('date'+up);date.hidden=!!volume.synthetic;date.textContent=volume.synthetic?'':formatSeriesDate(volume,language);
+  const date=$('date'+up);date.hidden=!!volume.synthetic;date.textContent=volume.synthetic?'':formatSeriesDate(volume,language);date.title=volume.synthetic?'':seriesDateSource(volume,language);
   resetRegistration('volume');resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
 
@@ -203,7 +203,7 @@ function loadFiles(slot,files){
         // A second scan replaces the chooser, but does not discard either volume.
         if(activeScan){const old=activeScan.slot,previous=state.loadWorkers[old];previous?.terminate();if(state.zipCache?.worker===previous)state.zipCache=null;delete state.loadWorkers[old];state.loading.delete(old);restoreSlotLabel(old);}
         activeScan={slot,choose};$('scanSummary').textContent='Для серии '+up+' найдено объёмов: '+data.groups.length+'. Выбери нужный.';$('seriesList').replaceChildren();
-        for(const group of data.groups){const btn=document.createElement('button');btn.className='series-choice';const text=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('small');title.textContent=group.name;meta.textContent=formatSeriesDate(group,language)+' · '+group.modality+' · '+(language==='ru'?'серия':'series')+' '+group.series+' · '+group.dims.join(' × ')+(group.echo?' · '+(language==='ru'?'эхо':'echo')+' '+group.echo:'');text.append(title,meta);btn.append(text);btn.addEventListener('click',()=>{activeScan=null;$('seriesDialog').close();choose(group.key);});$('seriesList').append(btn);}
+        for(const group of data.groups){const btn=document.createElement('button');btn.className='series-choice';const text=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('small');title.textContent=group.name;meta.textContent=formatSeriesDate(group,language)+' · '+group.modality+' · '+(language==='ru'?'серия':'series')+' '+group.series+' · '+group.dims.join(' × ')+(group.echo?' · '+(language==='ru'?'эхо':'echo')+' '+group.echo:'');meta.title=seriesDateSource(group,language);text.append(title,meta);btn.append(text);btn.addEventListener('click',()=>{activeScan=null;$('seriesDialog').close();choose(group.key);});$('seriesList').append(btn);}
         if(!$('seriesDialog').open)$('seriesDialog').showModal();
       }
     }
@@ -241,7 +241,7 @@ function demo(){
 function clearAll(announce=true){
   cancelManualMode();
   stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.zipCache?.worker.terminate();state.zipCache=null;state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;state.registrationStage='not-run';state.hasCompletedRegistration=false;
-  for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('date'+slot.toUpperCase()).hidden=true;$('dot'+slot.toUpperCase()).classList.remove('loaded');}
+  for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('date'+slot.toUpperCase()).hidden=true;$('date'+slot.toUpperCase()).title='';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
   $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;setRegistrationStage('volume');configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }
