@@ -12,7 +12,7 @@ test('manual alignment uses corner handles without one-degree buttons or numeric
   assert.match(html,/id="resetTransform"/);
   assert.doesNotMatch(html,/id="p[0-5]"/);
   assert.match(html,/Перетащи B поверх A/);
-  assert.match(app,/if\(\$\('manualMode'\)\.checked\)document\.querySelector\('\[data-display="blend"\]'\)\.click\(\)/);
+  assert.match(app,/if\(\$\('manualMode'\)\.checked\)document\.querySelector\('\[data-display="difference"\]'\)\.click\(\)/);
 });
 test('manual controls sit beside the result image instead of below the workspace',()=>{
   const panel=html.match(/<section class="viewport result-viewport"([\s\S]*?)<\/section>/)?.[1];
@@ -20,15 +20,16 @@ test('manual controls sit beside the result image instead of below the workspace
   assert.ok(panel.indexOf('id="manualMode"')<panel.indexOf('id="canvasR"'));
   assert.doesNotMatch(html.match(/<aside class="sidebar">([\s\S]*?)<\/aside>/)?.[1]||'',/id="manualMode"/);
 });
-test('drag previews the cached aligned B with a canvas shift, then resamples on release',()=>{
-  assert.match(app,/function renderManualPreview\(/);
-  assert.match(app,/ctx\.drawImage\(offscreen\.fusion,/);
+test('drag renders the current difference from B directly, then resamples on release',()=>{
+  assert.match(app,/state\.manualDragging\?sample\(state\.b,\.\.\.mapped\(map,\.\.\.p\)\)/);
+  assert.match(app,/if\(drag\.rotation\)[^\n]*requestRender\(\)/);
   assert.match(app,/dragTranslation\(/);
   assert.match(app,/pointerup[^\n]*scheduleResampling\(/);
+  assert.doesNotMatch(app,/ctx\.drawImage\(offscreen\.fusion,/);
 });
-test('manual editing switches to overlay and leaving overlay exits editing',()=>{
-  assert.match(app,/if\(\$\('manualMode'\)\.checked\)document\.querySelector\('\[data-display="blend"\]'\)\.click\(\)/);
-  assert.match(app,/state\.display!=='blend'&&\$\('manualMode'\)\.checked\)cancelManualMode\(\)/);
+test('manual editing switches to difference and leaving it exits editing',()=>{
+  assert.match(app,/if\(\$\('manualMode'\)\.checked\)document\.querySelector\('\[data-display="difference"\]'\)\.click\(\)/);
+  assert.match(app,/state\.display!=='difference'&&\$\('manualMode'\)\.checked\)cancelManualMode\(\)/);
 });
 test('reset and clear exit manual mode, automatic registration and transform export remain wired',()=>{
   assert.match(app,/function resetRegistration\([^)]*\)[\s\S]*?cancelManualMode\(\)/);

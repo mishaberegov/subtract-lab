@@ -15,7 +15,7 @@ test('four explicit rotation handles are shown only in manual mode and use the r
   assert.equal((html.match(/data-rotate-handle=/g)||[]).length,4);
   assert.match(app,/rotationDragDegrees\(/);
   assert.match(app,/rotateInPlane\(drag\.params,drag\.plane,degrees\)/);
-  assert.match(app,/previewAngle/);
+  assert.match(app,/state\.manualDragging\?sample\(state\.b,\.\.\.mapped\(map,\.\.\.p\)\)/);
   const css=readFileSync(new URL('../dist/viewer-layout.css',import.meta.url),'utf8');
   assert.match(css,/\.rotation-handle\{[^}]*cursor:url\("data:image\/svg\+xml,/);
 });
