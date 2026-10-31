@@ -31,6 +31,13 @@ test('manual editing switches to difference and leaving it exits editing',()=>{
   assert.match(app,/if\(\$\('manualMode'\)\.checked\)document\.querySelector\('\[data-display="difference"\]'\)\.click\(\)/);
   assert.match(app,/state\.display!=='difference'&&\$\('manualMode'\)\.checked\)cancelManualMode\(\)/);
 });
+test('manual editing keeps A fixed across drags until editing exits',()=>{
+  assert.match(app,/function viewExtent\(\)\{if\(\$\('manualMode'\)\.checked&&manualExtent\)return manualExtent;/);
+  assert.match(app,/manualExtent=viewExtent\(\);\s*stopResampling\(\);state\.manualDragging=true/);
+  assert.doesNotMatch(app,/pointerup[^\n]*manualExtent=null/);
+  assert.doesNotMatch(app,/pointercancel[^\n]*manualExtent=null/);
+  assert.match(app,/function cancelManualMode\(\)\{state\.manualDragging=false;manualExtent=null;/);
+});
 test('reset and clear exit manual mode, automatic registration and transform export remain wired',()=>{
   assert.match(app,/function resetRegistration\([^)]*\)[\s\S]*?cancelManualMode\(\)/);
   assert.match(app,/function clearAll\(announce=true\)[\s\S]*?cancelManualMode\(\)/);
