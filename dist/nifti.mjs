@@ -1,5 +1,5 @@
 // NIfTI-1 stores dimensions as signed 16-bit integers (dim[1..3]).
-export function makeNiftiHeader(a,mode){
+export function makeNiftiHeader(a){
   if(a.dims.length!==3||a.dims.some(v=>!Number.isInteger(v)||v<1||v>32767))
     throw Error('Размеры NIfTI должны быть целыми числами от 1 до 32767.');
   const header=new ArrayBuffer(352),dv=new DataView(header);
@@ -15,7 +15,7 @@ export function makeNiftiHeader(a,mode){
     dv.setFloat32(292+row*16,sign*a.origin[row],true);
   }
   new Uint8Array(header,344,4).set([110,43,49,0]);
-  const description=new TextEncoder().encode(mode==='raw'?'Signed A-kB after DICOM rescale':'Signed window-normalized A-kB');
+  const description=new TextEncoder().encode('Signed window-normalized difference');
   new Uint8Array(header,148,Math.min(79,description.length)).set(description.slice(0,79));
   return header;
 }

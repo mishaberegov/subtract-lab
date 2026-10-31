@@ -1,13 +1,13 @@
-import {clamp,center,rotation,samplingMap,mapped,sample,windowValue,difference,makeDemo} from './core.mjs?v=1.1.1-fov1';
+import {clamp,center,rotation,samplingMap,mapped,sample,windowValue,difference,makeDemo} from './core.mjs?v=1.1.9-simple1';
 import {gridSpacing} from './resampling.mjs';
-import {makeNiftiHeader} from './nifti.mjs';
+import {makeNiftiHeader} from './nifti.mjs?v=1.1.9-simple1';
 import {sourcePlane,planeMapping} from './orientation.mjs';
 import {displayExtent,displayPlane} from './display-grid.mjs?v=1.1.7-grid1';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.8-toolbar1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.9-simple1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.8-warnings1';
 import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date3';
 import {averageResultSlab} from './result-slab.mjs?v=1.1.8-slab1';
@@ -16,7 +16,7 @@ const language=languageFromUrl(location.href);
 localizeDocument(document,language);
 for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl(location.href,lang);if(lang===language)$(id).setAttribute('aria-current','page');}
 // Only application-owned output is translated; patient series names and DICOM metadata stay intact.
-const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','grayNote','scanSummary','registrationReport','gainLabel','warningNotice','registerBtn','exportNifti']);
+const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','grayNote','scanSummary','registrationReport','warningNotice','registerBtn','exportNifti']);
 const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.dataset.patientName==='true')continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
 uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},zipCache:null,loading:new Set(),demo:false};
@@ -98,8 +98,6 @@ function setVolume(slot,volume){
   const name=$('name'+up);name.hidden=!!volume.synthetic;name.textContent=volume.synthetic?'':volume.name;name.title=volume.synthetic?'':volume.name;
   const date=$('date'+up);date.hidden=!!volume.synthetic;date.textContent=volume.synthetic?'':formatSeriesDate(volume,language);date.title=volume.synthetic?'':seriesDateSource(volume,language);
   resetRegistration('volume');resetView();updateWarnings();updateButtons();
-  if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
-
 }
 function resetView(){state.zoom=1;const v=state.a||state.b;if(v)state.slice=Math.floor(sliceCount(v)/2);configureSlice();requestRender();}
 function sliceCount(v){return v.dims[planeMapping(v,state.plane,0).normalAxis];}
@@ -136,11 +134,11 @@ function render(){
   const pi=planeInfo(base),[nx,ny]=base.dims,map=state.a&&state.b?samplingMap(state.a,state.b,state.params):null;
   const images={};for(const key of ['a','b','r']){offscreen[key].width=pi.w;offscreen[key].height=pi.h;images[key]=offscreen[key].getContext('2d').createImageData(pi.w,pi.h);}
   if(state.display==='blend'){offscreen.fusion.width=pi.w;offscreen.fusion.height=pi.h;images.fusion=offscreen.fusion.getContext('2d').createImageData(pi.w,pi.h);}
-  const raw=$('subtractionMode').value==='raw',weight=clamp(Number($('weight').value)||0,0,10),sign=Number($('sign').value),gain=Number($('resultGain').value),scale=Math.max(.001,Number($('rawScale').value)||1),palette=$('palette').value,windowSize=Number($('windowSize').value)/100;
-  const fusionOpacity=clamp(gain/4,0,1),fusionThreshold=Number($('fusionThreshold').value)/100,variableAlpha=$('fusionVariableAlpha').checked,slabCount=Number($('resultSlab').value);
+  const sign=Number($('sign').value),palette=$('palette').value,windowSize=Number($('windowSize').value)/100;
+  const fusionOpacity=Number($('fusionOpacity').value)/100,fusionThreshold=Number($('fusionThreshold').value)/100,variableAlpha=$('fusionVariableAlpha').checked,slabCount=Number($('resultSlab').value);
   const readResult=q=>{
     const i=(q[2]*ny+q[1])*nx+q[0],a=state.a.data[i],b=state.manualDragging||!state.bOnA?sample(state.b,...mapped(map,...q)):state.bOnA.data[i];
-    return sign*difference(a,b,state.windows.a,state.windows.b,raw,weight);
+    return sign*difference(a,b,state.windows.a,state.windows.b);
   };
   for(let v=0;v<pi.h;v++)for(let u=0;u<pi.w;u++){
     const p=pi.voxel(u,v),i=(v*pi.w+u)*4,insideA=!!state.a&&p.every((v,i)=>v>=0&&v<state.a.dims[i]),ai=(p[2]*ny+p[1])*nx+p[0],av=insideA?state.a.data[ai]:NaN,bv=state.b?state.a?(state.manualDragging?sample(state.b,...mapped(map,...p)):insideA&&state.bOnA?state.bOnA.data[ai]:sample(state.b,...mapped(map,...p))):state.b.data[ai]:NaN;
@@ -160,7 +158,7 @@ function render(){
       const color=fusionColor(wb),overlay=images.fusion.data,alpha=fusionAlpha(wb,fusionOpacity,fusionThreshold,variableAlpha);
       overlay[i]=color[0];overlay[i+1]=color[1];overlay[i+2]=color[2];overlay[i+3]=Math.round(alpha*255);
     }else{
-      const delta=state.display==='difference'&&slabCount>1?averageResultSlab(p,pi.normalAxis,state.a.dims,slabCount,readResult):sign*difference(av,bv,state.windows.a,state.windows.b,raw,weight),t=clamp(delta/(raw?scale:1)*gain,-1,1);
+      const delta=state.display==='difference'&&slabCount>1?averageResultSlab(p,pi.normalAxis,state.a.dims,slabCount,readResult):sign*difference(av,bv,state.windows.a,state.windows.b),t=clamp(delta,-1,1);
       const g=palette==='absolute'?Math.abs(t)*255:(t+1)*127.5;d[i]=d[i+1]=d[i+2]=g;
     }
   }
@@ -244,7 +242,7 @@ function clearAll(announce=true){
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }
 function saveBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
-function settings(){return {mode:$('subtractionMode').value,sign:Number($('sign').value),weightB:clamp(Number($('weight').value)||0,0,10),windows:structuredClone(state.windows),resampling:state.bOnA?.resampling||null};}
+function settings(){return {mode:'windowed',sign:Number($('sign').value),windows:structuredClone(state.windows),resampling:state.bOnA?.resampling||null};}
 function exportTransform(){
   if(!(state.a&&state.b))return;const r=rotation(state.params),c=center(state.a),rc=[r[0]*c[0]+r[1]*c[1]+r[2]*c[2],r[3]*c[0]+r[4]*c[1]+r[5]*c[2],r[6]*c[0]+r[7]*c[1]+r[8]*c[2]],t=c.map((v,i)=>v-rc[i]+state.params[i]);
   const meta=v=>({name:v.name,dims:v.dims,originLPS:v.origin,voxelToLPS3x3:v.matrix,frameOfReferenceUID:v.frameUID,modality:v.modality,sliceThicknessMm:v.sliceThicknessMm??null});
@@ -256,9 +254,9 @@ async function exportNifti(){
   try{
     const {a,bOnA}=state,[nx,ny,nz]=a.dims,config=settings(),n=a.data.length;
     if(n>60000000)throw Error('Экспорт ограничен 60 млн вокселей в этой версии.');
-    const header=makeNiftiHeader(a,config.mode);
+    const header=makeNiftiHeader(a);
     const output=new Float32Array(n);
-    for(let z=0;z<nz;z++){for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){const i=(z*ny+y)*nx+x;output[i]=config.sign*difference(a.data[i],bOnA.data[i],config.windows.a,config.windows.b,config.mode==='raw',config.weightB);}if(z%4===0){button.textContent=Math.round((z+1)/nz*100)+'%';await new Promise(r=>setTimeout(r,0));}}
+    for(let z=0;z<nz;z++){for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){const i=(z*ny+y)*nx+x;output[i]=config.sign*difference(a.data[i],bOnA.data[i],config.windows.a,config.windows.b);}if(z%4===0){button.textContent=Math.round((z+1)/nz*100)+'%';await new Promise(r=>setTimeout(r,0));}}
     let blob=new Blob([header,output],{type:'application/octet-stream'}),filename='subtract-'+config.mode+'.nii';
     if(typeof CompressionStream!=='undefined'){button.textContent='Сжатие…';blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();blob=new Blob([blob],{type:'application/gzip'});filename+='.gz';}
     if(niftiUrl)URL.revokeObjectURL(niftiUrl);niftiUrl=URL.createObjectURL(blob);$('niftiDownloadLink').href=niftiUrl;$('niftiDownloadLink').download=filename;$('downloadDialog').showModal();
@@ -283,13 +281,13 @@ $('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state
 $('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('registrationReport').hidden=true;});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;manualExtent=null;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();updateWarnings();}));
-function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':format(Number($('resultGain').value),1)+'×';}
-document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Макс. непрозрачность B':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('slabControl').hidden=state.display!=='difference';$('resultSlab').disabled=state.display!=='difference';$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
+document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('slabControl').hidden=state.display!=='difference';$('resultSlab').disabled=state.display!=='difference';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');requestRender();}));
 $('resultSlab').addEventListener('change',requestRender);
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
+$('fusionOpacity').addEventListener('input',e=>{$('fusionOpacityValue').textContent=e.target.value+'%';requestRender();});
 $('fusionThreshold').addEventListener('input',e=>{$('fusionThresholdValue').textContent=e.target.value+'%';requestRender();});
 $('fusionVariableAlpha').addEventListener('change',e=>{$('fusionThreshold').disabled=!e.target.checked;requestRender();});
-for(const id of ['sign','weight','palette','rawScale','resultGain','subtractionMode'])$(id).addEventListener('input',()=>{$('rawScale').disabled=$('subtractionMode').value!=='raw';updateGain();requestRender();});
+for(const id of ['sign','palette'])$(id).addEventListener('input',requestRender);
 $('sliceSlider').addEventListener('input',e=>{state.slice=Number(e.target.value);configureSlice();requestRender();});$('prevSlice').addEventListener('click',()=>stepSlice(-1));$('nextSlice').addEventListener('click',()=>stepSlice(1));
 $('fitBtn').addEventListener('click',()=>{state.zoom=1;requestRender();});$('registerBtn').addEventListener('click',startRegistration);$('resetTransform').addEventListener('click',()=>{resetRegistration();requestRender();});$('demoBtn').addEventListener('click',demo);$('clearBtn').addEventListener('click',()=>clearAll());
 $('exportTransform').addEventListener('click',exportTransform);$('exportNifti').addEventListener('click',exportNifti);$('exportPng').addEventListener('click',()=>{render();canvases.r.toBlob(blob=>{if(blob)saveBlob(blob,'subtract-'+state.plane+'-'+(state.slice+1)+'.png');});});

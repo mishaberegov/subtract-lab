@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {compactCTVolume} from '../dist/precision.mjs';
-import {sample,difference,registerRigid,makeDemo} from '../dist/core.mjs';
+import {sample,difference,windowValue,registerRigid,makeDemo} from '../dist/core.mjs';
 import {resampleToReference} from '../dist/resampling.mjs';
 
 const volume=(data,modality='CT')=>({data:new Float32Array(data),modality,dims:[data.length,1,1],matrix:[1,0,0,0,1,0,0,0,1],origin:[0,0,0],stats:{lo:-1000,hi:3000}});
@@ -14,7 +14,7 @@ test('CT stores half-size Float16 voxels with NaN and usable rescaled intensity'
   assert.equal(v.data.byteLength,12);
   assert.ok(Number.isNaN(v.data[1]));
   assert.ok(Math.abs(sample(v,3,0,0)-36.3)<=0.125);
-  assert.ok(Math.abs(difference(v.data[3],35,{level:40,width:80},{level:40,width:80},true)-1.3)<=0.125);
+  assert.ok(Math.abs(difference(v.data[3],35,{level:40,width:80},{level:40,width:80})-(windowValue(v.data[3],40,80)-windowValue(35,40,80)))<1e-12);
   assert.ok(v.warnings.includes('Значения конвертированы в Float16 (погрешность до 1 HU).'));
 });
 

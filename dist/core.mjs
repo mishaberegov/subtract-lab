@@ -41,9 +41,9 @@ export function windowValue(x,level,width){
   if(width<=1)return x>level-0.5?1:0;
   return clamp((x-(level-0.5))/(width-1)+0.5,0,1);
 }
-export function difference(a,b,wa,wb,raw=false,gain=1){
+export function difference(a,b,wa,wb){
   if(!Number.isFinite(a)||!Number.isFinite(b))return NaN;
-  return raw?a-gain*b:windowValue(a,wa.level,wa.width)-gain*windowValue(b,wb.level,wb.width);
+  return windowValue(a,wa.level,wa.width)-windowValue(b,wb.level,wb.width);
 }
 export function statistics(v){
   const vals=[],stride=Math.max(1,Math.floor(v.data.length/100000));let min=Infinity,max=-Infinity;

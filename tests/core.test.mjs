@@ -10,8 +10,8 @@ test('trilinear interpolation, missing overlap, exact endpoints and DICOM window
   v.data[1]=NaN;assert.equal(sample(v,0,0,0),0);assert.ok(Number.isNaN(sample(v,.5,0,0)));
   assert.equal(windowValue(-100,50,100),0);assert.equal(windowValue(99,50,100),1);assert.equal(windowValue(49.5,50,100),.5);assert.equal(windowValue(50,50,1),1);assert.equal(windowValue(49,50,1),0);
 });
-test('independent windows cancel affine intensity differences; raw mode retains them',()=>{
-  const a=350,b=a*2+80,wa={level:500,width:1000},wb={level:(wa.level-.5)*2+80+.5,width:(wa.width-1)*2+1};assert.ok(Math.abs(difference(a,b,wa,wb))<1e-12);assert.equal(difference(a,b,wa,wb,true),-430);assert.ok(Number.isNaN(difference(a,NaN,wa,wb)));
+test('independent windows cancel affine intensity differences and missing voxels remain missing',()=>{
+  const a=350,b=a*2+80,wa={level:500,width:1000},wb={level:(wa.level-.5)*2+80+.5,width:(wa.width-1)*2+1};assert.ok(Math.abs(difference(a,b,wa,wb))<1e-12);assert.ok(Number.isNaN(difference(a,NaN,wa,wb)));
 });
 test('rigid registration recovers known translation and rotation despite gain, offset and lesion',async()=>{
   const {a,b,known}=makeDemo();const r=await registerRigid(a,b);

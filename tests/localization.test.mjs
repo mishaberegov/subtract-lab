@@ -76,8 +76,8 @@ test('demo names and geometry use localized labels and units without translating
   assert.match(app,/root\.dataset\.patientName==='true'/);
   assert.match(app,/['"]gridA['"],['"]gridB['"],['"]gridTarget['"]/);
 });
-test('gain readout uses selected numeric locale rather than a fixed decimal point',()=>{
-  assert.match(app,/format\(Number\(\$\('resultGain'\)\.value\),1\)/);
+test('fusion opacity displays a percentage independently of subtraction',()=>{
+  assert.match(app,/\$\('fusionOpacityValue'\)\.textContent=e\.target\.value\+'%'/);
 });
 test('language changes do not silently discard loaded patient series',()=>{
   assert.match(app,/state\.a\?\.synthetic/);
