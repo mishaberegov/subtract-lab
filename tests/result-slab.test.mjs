@@ -19,6 +19,13 @@ test('edges use available slices, missing centre remains missing, gaps are not f
   assert.equal(averageResultSlab([0,0,3],2,[2,2,5],3,read),9);
   assert.ok(Number.isNaN(averageResultSlab([2,0,0],2,[2,2,5],3,read)));
 });
+test('averaging lives next to manual alignment and is hidden outside difference',()=>{
+  const toolbar=html.match(/<div class="manual-toolbar">([\s\S]*?)<div class="canvas-wrap"/)?.[1];
+  assert.ok(toolbar,'manual toolbar exists');
+  assert.match(toolbar,/id="manualMode"[\s\S]*id="resultSlab"[\s\S]*id="resetTransform"/);
+  assert.match(app,/\$\('slabControl'\)\.hidden=state\.display!=='difference'/);
+  assert.doesNotMatch(html.match(/<div class="slice-navigation">[\s\S]*?<div class="workspace-bottom">/)?.[0]||'',/id="resultSlab"/);
+});
 test('result-only slab is selectable in three modes and does not change NIfTI or registration',()=>{
   assert.match(html,/id="resultSlab"[^>]*>[\s\S]*?value="1"[\s\S]*?value="3"[\s\S]*?value="5"/);
   assert.match(app,/state\.display==='difference'&&slabCount>1\?averageResultSlab\(/);

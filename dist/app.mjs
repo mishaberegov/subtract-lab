@@ -7,8 +7,8 @@ import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.8-slab1';
-import {formatWarningLines} from './warnings.mjs?v=1.1.2-warnings1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.8-toolbar1';
+import {formatWarningLines} from './warnings.mjs?v=1.1.8-warnings1';
 import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date3';
 import {averageResultSlab} from './result-slab.mjs?v=1.1.8-slab1';
 const $=id=>document.getElementById(id);
@@ -284,7 +284,7 @@ $('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('reg
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;manualExtent=null;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();updateWarnings();}));
 function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':format(Number($('resultGain').value),1)+'×';}
-document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Макс. непрозрачность B':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultSlab').disabled=state.display!=='difference';$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
+document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Макс. непрозрачность B':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('slabControl').hidden=state.display!=='difference';$('resultSlab').disabled=state.display!=='difference';$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
 $('resultSlab').addEventListener('change',requestRender);
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
 $('fusionThreshold').addEventListener('input',e=>{$('fusionThresholdValue').textContent=e.target.value+'%';requestRender();});

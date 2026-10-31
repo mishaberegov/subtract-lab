@@ -54,14 +54,13 @@ Object.assign(copy,{
 });
 Object.assign(copy,{
 'Значения конвертированы в Float16 (погрешность до 1 HU).':'Values converted to Float16 (up to 1 HU error).',
-'Пара A/B.':'Pair A/B.',
-'Frame of Reference серий различается. Проверь совмещение и выполни корегистрацию.':'The series have different Frames of Reference. Check alignment and run registration.',
 'Ручная коррекция':'Manual alignment',
 'Прозрачность по интенсивности B':'B opacity by intensity',
 'Порог прозрачности B':'B opacity threshold',
 'Макс. непрозрачность B':'Maximum B opacity',
 'Усреднение срезов · результат':'Slice averaging · result',
-'Без усреднения':'No averaging',
+'Усреднение':'Averaging',
+'Выкл.':'Off',
 '3 среза':'3 slices',
 '5 срезов':'5 slices',
 'Только «Разница» · PNG с усреднением, NIfTI без него':'Difference only · PNG includes averaging; NIfTI does not'

@@ -14,8 +14,7 @@ test('warning lines attribute repeated notices and seam to the correct A or B vo
   const b={warnings:[sizeB,half,seam],frameUID:'2'};
   assert.deepEqual(formatWarningLines(a,b),[
     'Серия A. '+sizeA+' '+half,
-    'Серия B. '+sizeB+' '+half+' '+seam,
-    'Пара A/B. Frame of Reference серий различается. Проверь совмещение и выполни корегистрацию.'
+    'Серия B. '+sizeB+' '+half+' '+seam
   ]);
 });
 
