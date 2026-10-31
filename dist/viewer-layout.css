@@ -79,6 +79,12 @@
  .viewport-pickers button{width:32px;height:30px;padding:5px}
 }
 
+.slab-control{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 0;padding:8px 12px;border:1px solid #2d353b;border-radius:6px;background:#1a1f23;font-size:11px;color:#c6d5d0}
+.slab-control select{background:#252d31;border:1px solid #40564c;border-radius:4px;color:#e2ece8;padding:5px 8px}
+.slab-control select:disabled{opacity:.5}
+.slab-control span{color:#96a6a6}
+@media(max-width:700px){.slab-control{margin:8px 0 0}}
+
 /* Slightly larger labels throughout the dense workspace. */
 :root{font-size:14px}
 .workspace-heading p,.local-badge,.notice,.field-label,.sidebar .workflow-section label{font-size:12px}

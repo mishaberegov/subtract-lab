@@ -7,9 +7,10 @@ import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.7-grid1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.8-slab1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.2-warnings1';
 import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date3';
+import {averageResultSlab} from './result-slab.mjs?v=1.1.8-slab1';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);
@@ -136,7 +137,11 @@ function render(){
   const images={};for(const key of ['a','b','r']){offscreen[key].width=pi.w;offscreen[key].height=pi.h;images[key]=offscreen[key].getContext('2d').createImageData(pi.w,pi.h);}
   if(state.display==='blend'){offscreen.fusion.width=pi.w;offscreen.fusion.height=pi.h;images.fusion=offscreen.fusion.getContext('2d').createImageData(pi.w,pi.h);}
   const raw=$('subtractionMode').value==='raw',weight=clamp(Number($('weight').value)||0,0,10),sign=Number($('sign').value),gain=Number($('resultGain').value),scale=Math.max(.001,Number($('rawScale').value)||1),palette=$('palette').value,windowSize=Number($('windowSize').value)/100;
-  const fusionOpacity=clamp(gain/4,0,1),fusionThreshold=Number($('fusionThreshold').value)/100,variableAlpha=$('fusionVariableAlpha').checked;
+  const fusionOpacity=clamp(gain/4,0,1),fusionThreshold=Number($('fusionThreshold').value)/100,variableAlpha=$('fusionVariableAlpha').checked,slabCount=Number($('resultSlab').value);
+  const readResult=q=>{
+    const i=(q[2]*ny+q[1])*nx+q[0],a=state.a.data[i],b=state.manualDragging||!state.bOnA?sample(state.b,...mapped(map,...q)):state.bOnA.data[i];
+    return sign*difference(a,b,state.windows.a,state.windows.b,raw,weight);
+  };
   for(let v=0;v<pi.h;v++)for(let u=0;u<pi.w;u++){
     const p=pi.voxel(u,v),i=(v*pi.w+u)*4,insideA=!!state.a&&p.every((v,i)=>v>=0&&v<state.a.dims[i]),ai=(p[2]*ny+p[1])*nx+p[0],av=insideA?state.a.data[ai]:NaN,bv=state.b?state.a?(state.manualDragging?sample(state.b,...mapped(map,...p)):insideA&&state.bOnA?state.bOnA.data[ai]:sample(state.b,...mapped(map,...p))):state.b.data[ai]:NaN;
     const wa=windowValue(av,state.windows.a.level,state.windows.a.width),wb=windowValue(bv,state.windows.b.level,state.windows.b.width);
@@ -155,7 +160,7 @@ function render(){
       const color=fusionColor(wb),overlay=images.fusion.data,alpha=fusionAlpha(wb,fusionOpacity,fusionThreshold,variableAlpha);
       overlay[i]=color[0];overlay[i+1]=color[1];overlay[i+2]=color[2];overlay[i+3]=Math.round(alpha*255);
     }else{
-      const delta=sign*difference(av,bv,state.windows.a,state.windows.b,raw,weight),t=clamp(delta/(raw?scale:1)*gain,-1,1);
+      const delta=state.display==='difference'&&slabCount>1?averageResultSlab(p,pi.normalAxis,state.a.dims,slabCount,readResult):sign*difference(av,bv,state.windows.a,state.windows.b,raw,weight),t=clamp(delta/(raw?scale:1)*gain,-1,1);
       const g=palette==='absolute'?Math.abs(t)*255:(t+1)*127.5;d[i]=d[i+1]=d[i+2]=g;
     }
   }
@@ -279,7 +284,8 @@ $('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('reg
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
 document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;manualExtent=null;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();updateWarnings();}));
 function updateGain(){const blend=state.display==='blend';$('gainValue').textContent=blend?Math.round(Number($('resultGain').value)/4*100)+'%':format(Number($('resultGain').value),1)+'×';}
-document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Макс. непрозрачность B':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
+document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('gainLabel').textContent=blend?'Макс. непрозрачность B':'Усиление разницы';$('resultGain').min=blend?'0':'.25';$('resultGain').max=blend?'4':'8';$('resultGain').value=clamp(Number($('resultGain').value),blend?0:.25,blend?4:8);$('resultSlab').disabled=state.display!=='difference';$('resultGain').disabled=state.display==='window';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateGain();requestRender();}));
+$('resultSlab').addEventListener('change',requestRender);
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
 $('fusionThreshold').addEventListener('input',e=>{$('fusionThresholdValue').textContent=e.target.value+'%';requestRender();});
 $('fusionVariableAlpha').addEventListener('change',e=>{$('fusionThreshold').disabled=!e.target.checked;requestRender();});

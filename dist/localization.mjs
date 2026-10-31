@@ -59,7 +59,12 @@ Object.assign(copy,{
 'Ручная коррекция':'Manual alignment',
 'Прозрачность по интенсивности B':'B opacity by intensity',
 'Порог прозрачности B':'B opacity threshold',
-'Макс. непрозрачность B':'Maximum B opacity'
+'Макс. непрозрачность B':'Maximum B opacity',
+'Усреднение срезов · результат':'Slice averaging · result',
+'Без усреднения':'No averaging',
+'3 среза':'3 slices',
+'5 срезов':'5 slices',
+'Только «Разница» · PNG с усреднением, NIfTI без него':'Difference only · PNG includes averaging; NIfTI does not'
 });
 export function languageFromUrl(url){return new URL(url).searchParams.get('lang')==='ru'?'ru':'en';}
 export function languageUrl(url,language){const u=new URL(url);if(language==='ru')u.searchParams.set('lang','ru');else u.searchParams.delete('lang');return u.pathname+u.search+u.hash;}
