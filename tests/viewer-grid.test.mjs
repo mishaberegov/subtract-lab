@@ -8,8 +8,8 @@ const css=readFileSync(new URL('../dist/viewer-layout.css',import.meta.url),'utf
 
 test('A and B no longer show redundant series summary rows',()=>{
   assert.doesNotMatch(html,/class="series-summary"/);
-  assert.doesNotMatch(app,/\$\('(?:name|meta)[AB]'\)/);
-  assert.doesNotMatch(app,/\$\('(?:name|meta)'\+up\)/);
+  assert.doesNotMatch(app,/\$\('meta[AB]'\)/);
+  assert.doesNotMatch(app,/\$\('meta'\+up\)/);
   assert.match(html,/id="demoMarker"/);
   assert.match(html,/id="clearBtn"/);
   assert.match(app,/label\.textContent=volume\.synthetic\?'':volume\.name/);

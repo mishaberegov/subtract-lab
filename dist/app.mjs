@@ -94,7 +94,8 @@ function setVolume(slot,volume){
   state.windows[slot]={...volume.window};const up=slot.toUpperCase();
   $('wl'+up).value=Number(volume.window.level.toFixed(2));$('ww'+up).value=Number(volume.window.width.toFixed(2));
   const label=$('label'+up);label.dataset.patientName=volume.synthetic?'false':'true';label.textContent=volume.synthetic?'':volume.name;label.title=volume.synthetic?'':volume.name;$('dot'+up).classList.add('loaded');
-  const date=$('date'+up);date.hidden=!!volume.synthetic;date.replaceChildren();if(!volume.synthetic){const name=document.createElement('span'),dateText=document.createElement('span');name.className='series-name';name.textContent=volume.name;name.title=volume.name;dateText.className='date-text';dateText.textContent=formatSeriesDate(volume,language);dateText.title=seriesDateSource(volume,language);date.replaceChildren(name,dateText);}
+  const name=$('name'+up);name.hidden=!!volume.synthetic;name.textContent=volume.synthetic?'':volume.name;name.title=volume.synthetic?'':volume.name;
+  const date=$('date'+up);date.hidden=!!volume.synthetic;date.textContent=volume.synthetic?'':formatSeriesDate(volume,language);date.title=volume.synthetic?'':seriesDateSource(volume,language);
   resetRegistration('volume');resetView();updateWarnings();updateButtons();
   if(state.a&&state.b){const scale=Math.max(1,(state.a.stats.hi-state.a.stats.lo)*.3);$('rawScale').value=Number(scale.toFixed(2));}
 
@@ -244,7 +245,7 @@ function demo(){
 function clearAll(announce=true){
   cancelManualMode();
   stopRegistration(false);stopResampling();state.bOnA=null;for(const worker of Object.values(state.loadWorkers))worker.terminate();state.loadWorkers={};state.zipCache?.worker.terminate();state.zipCache=null;state.loading.clear();cancelScan();state.a=state.b=null;state.demo=false;state.slice=0;state.zoom=1;state.params=[0,0,0,0,0,0];state.registration=null;state.registrationStage='not-run';state.hasCompletedRegistration=false;
-  for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('date'+slot.toUpperCase()).hidden=true;$('date'+slot.toUpperCase()).title='';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
+  for(const slot of ['a','b']){restoreSlotLabel(slot);$('label'+slot.toUpperCase()).textContent='Не загружен';$('name'+slot.toUpperCase()).hidden=true;$('name'+slot.toUpperCase()).textContent='';$('name'+slot.toUpperCase()).title='';$('date'+slot.toUpperCase()).hidden=true;$('date'+slot.toUpperCase()).title='';$('dot'+slot.toUpperCase()).classList.remove('loaded');}
   $('demoMarker').hidden=$('clearBtn').hidden=true;$('warningNotice').hidden=true;$('registrationReport').hidden=true;setRegistrationStage('volume');configureSlice();updateButtons();requestRender();if(announce)toast('Рабочая область очищена.');
   $('geometryStrip').hidden=true;$('resampleStatus').textContent='Автоматически после загрузки A и B';
 }

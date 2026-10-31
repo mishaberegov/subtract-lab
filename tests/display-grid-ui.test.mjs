@@ -18,10 +18,13 @@ test('resetting registration refreshes the display range and clipping warnings',
   const reset=app.match(/function resetRegistration[\s\S]*?function updateWarnings/)?.[0]||'';
   assert.match(reset,/configureSlice\(\);updateWarnings\(\);scheduleResampling\(\)/);
 });
-test('image corners show series title and a subtler date without showing demo metadata',()=>{
-  assert.match(app,/date\.replaceChildren\(name,dateText\)/);
-  assert.match(app,/name\.textContent=volume\.name/);
-  assert.match(app,/dateText\.textContent=formatSeriesDate\(volume,language\)/);
-  assert.match(css,/\.series-date \.date-text\{color:#98a9ab/);
-  assert.match(html,/viewer-layout\.css\?v=.*grid/);
+test('series title sits left and muted date right in both image corners',()=>{
+  for(const slot of ['A','B']){
+    assert.match(html,new RegExp(`id="name${slot}"[^>]*></div>[\\s\\S]*id="date${slot}"`));
+  }
+  assert.match(app,/name\.textContent=volume\.synthetic\?'':volume\.name/);
+  assert.match(app,/date\.textContent=volume\.synthetic\?'':formatSeriesDate\(volume,language\)/);
+  assert.match(css,/\.series-name\{[^}]*left:10px/);
+  assert.match(css,/\.series-date\{[^}]*right:10px/);
+  assert.match(css,/\.series-date\{[^}]*color:#98a9ab/);
 });
