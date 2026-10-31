@@ -97,6 +97,19 @@ test('ZIP chooser keeps metadata and reopens archive only for the chosen series'
   assert.ok(bytesRead>scanned,'selected ZIP entries should be read on demand after the chooser');
   assert.equal(messages.find(m=>m.type==='volume').volume.data[0],100);
 });
+test('ZIP chooser reports distinct DICOM dates and preserves the chosen date in its volume',async()=>{
+  const zip=new File([fflate.zipSync({
+    'a.dcm':dicomSlice({uid:'2.25.60001',seriesDate:'20200102'}),
+    'b.dcm':dicomSlice({uid:'2.25.60002',seriesDate:'20240305'})
+  })],'dated.zip');
+  const messages=[],self={postMessage:message=>messages.push(message)};
+  vm.runInNewContext(source,{self,Uint8Array,ArrayBuffer,DataView,URL,dicomParser:parser,fflate,importScripts(){}},{filename:fileURLToPath(workerURL),importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});
+  await self.onmessage({data:{type:'scan',slot:'a',files:[zip]}});
+  const groups=messages.find(m=>m.type==='groups').groups;
+  assert.deepEqual(groups.map(g=>g.date),['2020-01-02','2024-03-05']);
+  await self.onmessage({data:{type:'build',key:groups[1].key}});
+  assert.equal(messages.find(m=>m.type==='volume')?.volume.date,'2024-03-05');
+});
 
 test('metadata beyond the first 64 KB is still discovered before PixelData',async()=>{
   const slice=dicomSlice({rows:256,cols:256,values:Array(256*256).fill(77)});

@@ -28,6 +28,22 @@ test('interpolation keeps padding unknown rather than blending it into tissue',a
 test('one overlapping boundary between contiguous acquisitions remains one series',async()=>{const specs=[[0,1,10],[1,1,11],[1,2,21],[2,2,22],[3,2,23]];const g=groupParsed(specs.map(([z,acquisition,value],i)=>parseFile(dicomSlice({z,acquisition,values:Array(20).fill(value)}),'slice'+i,parser)))[0];const v=await buildVolume(g,{parser});assert.deepEqual(v.dims,[5,4,4]);assert.deepEqual([v.data[0],v.data[20],v.data[40],v.data[60]],[10,21,22,23]);assert.ok(v.warnings.includes('Две последовательные съёмки перекрываются на одном срезе. Один граничный срез исключён.'));});
 test('two overlapping positions between acquisitions are not silently merged',()=>{const specs=[[0,1],[1,1],[2,1],[1,2],[2,2],[3,2]];const g=groupParsed(specs.map(([z,acquisition],i)=>parseFile(dicomSlice({z,acquisition}),'slice'+i,parser)))[0];assert.throws(()=>geometry(g),/Повторяющиеся|перекры/);});
 test('different series never merge',()=>{const gs=groupParsed([parseFile(dicomSlice({uid:'2.25.111'}),'a',parser),parseFile(dicomSlice({uid:'2.25.222'}),'b',parser)]);assert.equal(gs.length,2);});
+test('series date is carried from the chooser into the loaded volume',async()=>{
+  const g=group({studyDate:'20200102',acquisitionDate:'20210304',seriesDate:'20220405'});
+  assert.equal(g.date,'2022-04-05');assert.equal(g.dateSource,'series');
+  assert.equal(g.frames.length,3);
+  assert.equal((await buildVolume(g,{parser})).date,'2022-04-05');
+});
+test('DICOM dates fall back to acquisition then study without inventing a date',()=>{
+  assert.equal(group({acquisitionDateTime:'20230304120000'}).date,'2023-03-04');
+  assert.equal(group({studyDate:'20240506'}).dateSource,'study');
+  assert.equal(group({studyDate:'20240230'}).date,null);
+  assert.equal(group().date,null);
+});
+test('different dates within a DICOM group are identified as mixed',()=>{
+  const g=groupParsed([parseFile(dicomSlice({z:0,seriesDate:'20210101'}),'one',parser),parseFile(dicomSlice({z:1,seriesDate:'20210102'}),'two',parser)])[0];
+  assert.equal(g.dateSource,'mixed');assert.equal(g.date,null);
+});
 test('original SliceThickness is kept separate from slice-to-slice grid spacing',async()=>{const v=await buildVolume(group({sliceThickness:1.5}),{parser});assert.equal(v.sliceThicknessMm,1.5);assert.equal(v.matrix[8],2);});
 test('large series is reduced to a usable browser volume without losing slice coverage',async()=>{const v=await buildVolume(group(),{parser,maxVoxels:20});assert.deepEqual(v.dims,[3,2,3]);assert.deepEqual(v.matrix,[2.4,0,0,0,3,0,0,0,2]);assert.equal(v.data[0],3);assert.equal(v.data[12],43);assert.ok(v.warnings.includes('Большой объём: разрешение в плоскости уменьшено в 2 раза (до 3×2×3); исходные срезы по оси Z сохранены.'));});
 test('RLE DICOM restores 16-bit byte planes',async()=>{

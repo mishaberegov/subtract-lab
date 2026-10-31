@@ -3,6 +3,20 @@ const nums=(ds,tag)=>{const s=ds?.string(tag);return s?s.split('\\').map(Number)
 const seq=(ds,tag,index=0)=>ds?.elements[tag]?.items?.[index]?.dataSet;
 const scalar=(ds,tag,fallback)=>{const x=nums(ds,tag)?.[0];return Number.isFinite(x)?x:fallback;};
 const nested=(frame,shared,tag)=>seq(frame,tag)||seq(shared,tag);
+function dicomDate(value){
+  const match=/^(\d{4})(\d{2})(\d{2})/.exec(value||'');
+  if(!match)return null;
+  const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  const days=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
+  return year&&month>=1&&month<=12&&day>=1&&day<=days[month-1]?`${match[1]}-${match[2]}-${match[3]}`:null;
+}
+function seriesDate(ds){
+  for(const [tag,source] of [['x00080021','series'],['x00080022','acquisition'],['x0008002a','acquisition'],['x00080020','study']]){
+    const date=dicomDate(ds.string(tag));if(date)return {date,dateSource:source};
+  }
+  return {date:null,dateSource:null};
+}
 export function inflateDicomDataset(data,pos,limit=500e6){
   if(pos>limit)throw Error('Deflated DICOM превышает лимит распакованного размера.');
   const chunks=[];let size=pos;
@@ -51,14 +65,21 @@ export function parseFile(bytes,name,parser=globalThis.dicomParser,metadataOnly=
   }
   const uid=ds.string('x0020000e');if(!uid)throw Error('Нет SeriesInstanceUID.');
   const key=[uid,ds.string('x00180086')||'',ds.string('x00200100')||'',ds.string('x00080008')||''].join('|');
-  return {key,frames,name:ds.string('x0008103e')||ds.string('x00181030')||'DICOM-серия',modality:ds.string('x00080060')||'DICOM',series:ds.string('x00200011')||'',echo:ds.string('x00180086')||'',frameUID:ds.string('x00200052')||'',ts:ds.string('x00020010')||'1.2.840.10008.1.2'};
+  return {key,frames,name:ds.string('x0008103e')||ds.string('x00181030')||'DICOM-серия',modality:ds.string('x00080060')||'DICOM',series:ds.string('x00200011')||'',echo:ds.string('x00180086')||'',frameUID:ds.string('x00200052')||'',ts:ds.string('x00020010')||'1.2.840.10008.1.2',...seriesDate(ds)};
 }
 export function groupParsed(parsed){
   const groups=new Map();
-  for(const item of parsed.filter(Boolean)){if(groups.has(item.key))groups.get(item.key).frames.push(...item.frames);else groups.set(item.key,{...item,frames:[...item.frames]});}
+  for(const item of parsed.filter(Boolean)){
+    if(!groups.has(item.key)){groups.set(item.key,{...item,frames:[...item.frames]});continue;}
+    const group=groups.get(item.key);group.frames.push(...item.frames);
+    if(group.dateSource==='mixed'||!item.date)continue;
+    if(!group.date){group.date=item.date;group.dateSource=item.dateSource;}
+    else if(group.date!==item.date){group.date=null;group.dateSource='mixed';}
+    else if(['study','acquisition','series'].indexOf(item.dateSource)>['study','acquisition','series'].indexOf(group.dateSource))group.dateSource=item.dateSource;
+  }
   return [...groups.values()].sort((a,b)=>b.frames.length-a.frames.length);
 }
-export function describeGroup(g){return {key:g.key,name:g.name,modality:g.modality,series:g.series,echo:g.echo,frames:g.frames.length,dims:[g.frames[0].cols,g.frames[0].rows,g.frames.length],ts:g.ts};}
+export function describeGroup(g){return {key:g.key,name:g.name,modality:g.modality,series:g.series,echo:g.echo,frames:g.frames.length,dims:[g.frames[0].cols,g.frames[0].rows,g.frames.length],ts:g.ts,date:g.date,dateSource:g.dateSource};}
 export function geometry(g){
   const frames=[...g.frames],first=frames[0],normal=first.norm;frames.sort((a,b)=>dot(a.ipp,normal)-dot(b.ipp,normal));
   let seamRemoved=0;
@@ -203,7 +224,7 @@ export async function buildVolume(g,{onProgress=()=>{},...options}={}){
     }
     previous=current;onProgress((i+1)/geo.frames.length);
   }
-  const v={dims,matrix,origin,data,name:g.name,modality:g.modality,frameUID:g.frameUID,ts:g.ts,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
+  const v={dims,matrix,origin,data,name:g.name,modality:g.modality,frameUID:g.frameUID,ts:g.ts,date:g.date,dateSource:g.dateSource,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
   v.stats=statistics(v);
   const ds=geo.frames[0].ds,wl=scalar(ds,'x00281050',NaN),ww=scalar(ds,'x00281051',NaN);
   v.window=Number.isFinite(wl)&&ww>=1?{level:wl,width:ww}:{level:v.stats.level,width:v.stats.width};
