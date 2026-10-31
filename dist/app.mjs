@@ -9,7 +9,7 @@ import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
 import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.7-grid1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.2-warnings1';
-import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date2';
+import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date3';
 const $=id=>document.getElementById(id);
 const language=languageFromUrl(location.href);
 localizeDocument(document,language);

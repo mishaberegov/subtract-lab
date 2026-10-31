@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {formatSeriesDate,seriesDateSource} from '../dist/series-date.mjs';
 
 test('date labels show only the date in each language',()=>{
-  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'series'},'ru'),'05.03.2024');
-  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'series'},'en'),'2024-03-05');
-  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'study'},'ru'),'05.03.2024');
-  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'acquisition'},'en'),'2024-03-05');
+  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'series'},'ru'),'05-03-2024');
+  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'series'},'en'),'05-03-2024');
+  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'study'},'ru'),'05-03-2024');
+  assert.equal(formatSeriesDate({date:'2024-03-05',dateSource:'acquisition'},'en'),'05-03-2024');
 });
 test('source is available as a tooltip, not as a date prefix',()=>{
   assert.equal(seriesDateSource({date:'2024-03-05',dateSource:'series'},'ru'),'Дата серии');
