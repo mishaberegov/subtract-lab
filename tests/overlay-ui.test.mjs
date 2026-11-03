@@ -17,6 +17,11 @@ test('grayscale preview and DICOM export use the same B-grid overlay sampler',()
   assert.match(html,/id="overlaySlice"/);
   assert.match(html,/id="exportOverlayDicom"/);
 });
+test('wheel over grayscale B-grid result advances the B preview slice rather than only A',()=>{
+  assert.match(app,/function stepOverlaySlice\(delta\)/);
+  assert.match(app,/wrap\.addEventListener\('wheel',[^\n]*key==='r'[^\n]*stepOverlaySlice/);
+});
+
 test('DICOM export is disabled for synthetic demo and B without study provenance',()=>{
   assert.match(app,/state\.b\?\.study\?\.studyUID/);
   assert.match(app,/state\.b\?\.frameUID/);

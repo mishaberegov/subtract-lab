@@ -115,6 +115,7 @@ function configureOverlaySlice(reset=false){
   $('overlaySliceValue').textContent=(state.overlaySlice+1)+' / '+n;
 }
 function stepSlice(delta){if(!(state.a||state.b))return;state.slice+=delta;configureSlice();requestRender();}
+function stepOverlaySlice(delta){if(!state.b)return;state.overlaySlice+=delta;configureOverlaySlice();requestRender();}
 function requestRender(){if(!renderFrame)renderFrame=requestAnimationFrame(()=>{renderFrame=null;render();});}
 function planeInfo(v){
   const extent=viewExtent();return extent?displayPlane(v,state.plane,state.slice,extent):planeMapping(v,state.plane,state.slice);
@@ -335,7 +336,7 @@ $('exportTransform').addEventListener('click',exportTransform);$('exportNifti').
 $('helpBtn').addEventListener('click',()=>$('helpDialog').showModal());$('closeHelp').addEventListener('click',()=>$('helpDialog').close());$('closeSeries').addEventListener('click',cancelScan);$('seriesDialog').addEventListener('cancel',cancelScan);
 $('closeDownload').addEventListener('click',()=>$('downloadDialog').close());
 for(const key of ['a','b','r']){
-  const wrap=canvases[key].parentElement;wrap.addEventListener('wheel',e=>{e.preventDefault();stepSlice(e.deltaY>0?1:-1);},{passive:false});let drag=null;
+  const wrap=canvases[key].parentElement;wrap.addEventListener('wheel',e=>{e.preventDefault();const delta=e.deltaY>0?1:-1;if(key==='r'&&state.display==='blend'&&$('overlayLut').value==='gray')stepOverlaySlice(delta);else stepSlice(delta);},{passive:false});let drag=null;
   const moveWindow=e=>{if(key!=='r'||state.display!=='window'||!(state.a&&state.b))return;const canvas=canvases.r,rect=canvas.getBoundingClientRect();state.reveal=pointerToImage((e.clientX-rect.left)*canvas.width/rect.width,(e.clientY-rect.top)*canvas.height/rect.height,canvas,planeInfo(state.a),state.zoom);requestRender();};
   wrap.addEventListener('pointerdown',e=>{if(!(state.a||state.b))return;if(key==='r'&&$('manualMode').checked&&state.a&&state.b&&!e.shiftKey){
     const canvas=canvases.r,rect=canvas.getBoundingClientRect(),start={x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height};
