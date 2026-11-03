@@ -23,6 +23,11 @@
 .viewport-title{height:47px}
 .register-in-viewer{width:auto;margin:0;padding:7px 10px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:11px}
 .result-viewport .viewport-title .viewport-subtitle{margin-left:auto}
+.overlay-lut{display:flex;align-items:center;gap:5px;margin-left:auto;white-space:nowrap;font-size:10px;color:#b9c7ca}
+.overlay-lut[hidden],#overlaySliceControl[hidden]{display:none}
+.overlay-lut select{max-width:128px;min-width:82px;padding:5px 4px;background:#182329;border:1px solid #31434a;border-radius:5px;color:#e6eeee;font-size:10px}
+#overlaySliceControl{display:grid;gap:5px;border-top:1px solid #314047;padding-top:9px}
+#overlaySliceControl .range-label{display:flex;justify-content:space-between}
 .upload-viewport .viewport-title{gap:8px;padding:0 11px}
 .upload-viewport .viewport-title .viewport-subtitle{display:block;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .viewport-title .loaded-dot{flex:none}

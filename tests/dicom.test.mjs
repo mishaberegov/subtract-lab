@@ -2,6 +2,18 @@ import test from 'node:test';import assert from 'node:assert/strict';import {cre
 import {parseFile,groupParsed,geometry,buildVolume,decodeFrame} from '../dist/dicom.mjs';import {dicomSlice} from '../scripts/fixtures.mjs';import {Decoder,Utils} from 'jpeg-lossless-decoder-js';
 const require=createRequire(import.meta.url),parser=require('dicom-parser');
 const group=(options={})=>groupParsed([2,0,1].map(z=>parseFile(dicomSlice({z,...options}),'slice'+z,parser)))[0];
+test('moving-series study metadata survives grouping and volume building',async()=>{
+  const g=group({studyUID:'2.25.10001',studyDate:'20200102',patientID:'SYNTHETIC-001',patientName:'TEST^PHANTOM'});
+  const v=await buildVolume(g,{parser});
+  assert.equal(v.study.studyUID,'2.25.10001');
+  assert.equal(v.study.patientID,'SYNTHETIC-001');
+  assert.equal(v.study.patientName,'TEST^PHANTOM');
+  assert.equal(v.study.studyDate,'20200102');
+});
+test('one SeriesInstanceUID cannot silently combine different StudyInstanceUID values',()=>{
+  const slices=[dicomSlice({z:0,studyUID:'2.25.11'}),dicomSlice({z:1,studyUID:'2.25.12'})];
+  assert.throws(()=>groupParsed(slices.map((bytes,i)=>parseFile(bytes,'slice'+i,parser))),/StudyInstanceUID/);
+});
 test('DICOM slices sort by physical position, with rescale and anisotropic spacing',async()=>{const g=group({slope:2,intercept:-1000});const v=await buildVolume(g,{parser});assert.deepEqual(v.dims,[5,4,3]);assert.deepEqual(v.matrix,[1.2,0,0,0,1.5,0,0,0,2]);assert.equal(v.data[0],-1000);assert.equal(v.data[20],-960);assert.equal(v.data[40],-920);});
 test('Big Endian and signed 12-bit data decode exactly',async()=>{const values=[-2048,-1,0,2047,...Array(16).fill(44)].map(x=>x&4095);for(const little of [true,false]){const v=await buildVolume(group({little,signed:true,bitsStored:12,highBit:11,values}),{parser});assert.deepEqual(Array.from(v.data.slice(0,4)),[-2048,-1,0,2047]);}});
 test('padding is masked instead of treated as physical intensity',async()=>{const v=await buildVolume(group({values:Array(20).fill(7).map((v,i)=>i===0?-2000:v),signed:true,padding:-2000}),{parser});assert.ok(Number.isNaN(v.data[0]));assert.equal(v.data[1],7);});
