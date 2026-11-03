@@ -1,17 +1,29 @@
-# Subtract — DICOM workspace
+# Subtract Lab
 
-Browser-local prototype for loading two DICOM volumes, rigid registration, independent DICOM LINEAR windows and signed subtraction. No DICOM data leaves the browser. All dependencies and WebAssembly codecs are served with the app; no CDN or remote processing service is used.
+Two scans, taken at different times: what changed? Subtract Lab lets you put them side by side, align them, and inspect the difference. The images stay in your browser; the app does not upload DICOM files to a server. No account, CDN, or remote processing service is needed.
+
+![Two brain MRI series side by side with their difference in Subtract Lab](assets/subtract-lab.png)
+
+[Open Subtract Lab](https://mri.moscow/subtract-lab/) · [Русская версия](https://mri.moscow/subtract-lab/?lang=ru)
+
+## Start here
+
+1. Load two DICOM series, folders or ZIP archives. **A** stays fixed; **B** is the scan to align with it.
+2. Check the initial alignment from DICOM coordinates. Press **Register** to refine it, or adjust B by hand. Check more than one slice and plane.
+3. Explore the signed **Difference**, use the movable **Reveal window**, or switch to **Overlay**. The grayscale overlay can also be exported as a DICOM series on B's grid.
+
+The screenshot shows two MRI series, not the app's synthetic demo. A bright or dark difference is not, by itself, evidence of disease progression: misregistration, different acquisition settings and image intensity changes can all leave marks. This is an exploratory tool, **not a clinically validated diagnostic device**.
 
 ## Run
 
-Serve `dist/` from an HTTP server. ES modules and workers do not work reliably over `file://`. There is no build step. `npm ci` installs development dependencies; `npm test` runs the computational and DICOM tests. Static vendored assets are committed for deployment. The interface defaults to English; append `?lang=ru` for Russian or use the EN/RU links. Changing language reloads the page, so save or export your work first; loaded real series and non-default alignment trigger a confirmation. The demo is labelled as synthetic data.
+Serve `dist/` from an HTTP server; ES modules and workers do not work reliably over `file://`. There is no build step. `npm ci` installs development dependencies and `npm test` runs the computational and DICOM tests. Static vendored assets are committed for deployment. The interface defaults to English; append `?lang=ru` for Russian. Changing language reloads the page, so save or export your work first; loaded real series and non-default alignment trigger a confirmation. The built-in demo is labelled as synthetic data.
 
 ## Behavior
 
 - A is the fixed reference. A complete Float32 B-on-A volume is built in a Web Worker after loading, registration or manual correction. Its dimensions, voxel matrix, origin and frame of reference exactly match A. Slice rendering, subtraction and NIfTI export use this same volume. Original B is retained for registration; repeated corrections resample from the original, never from the last resampled output.
 - When the same indexed ZIP is selected for A and B, the current page retains its ZIP directory and DICOM header metadata in one worker. The second selection verifies ZIP entry metadata and reads only the chosen series in full; a different archive is rescanned. The cache is memory-only and is released when the workspace is cleared, another archive is opened, or the page closes. No DICOM pixels are cached in the scan index.
 - Downsampling applies an optional separable Gaussian anti-alias filter in source space. Sigma matches the diagonal difference between the target voxel footprint variance (projected into source voxel coordinates) and the source voxel variance. The filter ignores padded samples, preserves missing center voxels and is bypassed for equal or finer grids. This approximates voxel-footprint matching, not the scanner slice profile or true PSF matching. The UI shows original SliceThickness separately from 3D grid spacing. Upsampling cannot restore missing through-plane detail.
-- Subtraction is grayscale only: signed differences use mid-gray for zero, and an optional magnitude mode uses black for zero. Nonoverlap is shown as a neutral gray hatch.
+- Subtraction is grayscale only: signed differences use mid-gray for zero. Nonoverlap is shown as a neutral gray hatch. Overlay is a separate view, not a numerical difference.
 - The third viewer also has a frameless movable comparison window: A fills the background and resampled B is shown only inside the rectangle. Move it with the mouse or touch, and adjust its size with the slider. This is a display-only comparison, not a spatial deformation or a subtraction; NIfTI export still contains the numerical difference.
 - Automatic registration estimates 3 translations and 3 Euler rotations, with a coarse-to-fine coordinate search using NCC or normalized mutual information. When fixed A covers substantially more anatomy than moving B (for example, head-and-neck versus head-only CT), optimization samples the physical region near B's field of view instead of treating A-only anatomy as failed overlap; the result is still resampled on the full A grid. It is a local optimizer, not an exhaustive search or a substitute for ITK/elastix validation. Large pose changes, changing anatomy, small overlap and repetitive structure can cause incorrect convergence.
 - Series selection shows the DICOM SeriesDate when present, then AcquisitionDate/AcquisitionDateTime, then StudyDate. The chooser shows just the date; each A/B image has its series description in the top-left corner and a muted date in the top-right corner. Hover over the date to see which DICOM date field supplied it. Missing or conflicting dates are identified, never inferred from ZIP timestamps.
@@ -20,9 +32,9 @@ Serve `dist/` from an HTTP server. ES modules and workers do not work reliably o
 - Parameter mapping: `pB = Rz Ry Rx (pA − centerA) + centerA + t` in DICOM LPS mm. A→B is the sampling transform, not B→A. JSON exports include the full 4×4 matrix.
 - Display planes follow the voxel axes of A (including oblique acquisitions), with patient orientation labels. They are not reoriented to canonical anatomical axes. Anisotropic pixel aspect ratios are preserved; gantry tilt/shear is preserved by the physical sampling map, although the 2D display is rectangular.
 - The initial display plane is identified from A's physical DICOM slice normal (or B's until A is loaded), rather than assuming that the third array dimension is axial. The axial/coronal/sagittal controls pick the closest source-grid axis to each patient plane. For oblique acquisitions these remain oblique voxel-axis views, not canonical orthogonal reformatting; check the orientation labels.
-- Windowed subtraction is `W(A) − k W(B)` or its negation; W uses independent WL/WW, maps to 0–1, and clips outside the window. Raw subtraction uses rescaled intensities before windowing. No histogram matching, bias-field correction, SUV conversion, decay correction or deformable registration is applied.
-- Nonoverlap/pixel padding are excluded rather than zero-filled. NIfTI exports contain NaN outside valid overlap. Display scale, gain and palette do not alter exported differences.
-- PNG exports the current result view. NIfTI exports Float32 data in A's grid with an LPS→RAS sform, gzip-compressed as `.nii.gz` when the browser supports CompressionStream. JSON preserves parameters, settings and geometry. NIfTI/JSON may contain study geometry and a series description; the app never uploads these exports.
+- Windowed subtraction is `W(A) − W(B)`: each image has independent WL/WW, mapped to 0–1 and clipped outside its window. No raw-intensity subtraction, histogram matching, bias-field correction, SUV conversion, decay correction or deformable registration is applied.
+- Nonoverlap/pixel padding are excluded rather than zero-filled. NIfTI exports contain NaN outside valid overlap. Display scale and palette do not alter exported differences.
+- PNG exports the current result view. NIfTI exports Float32 signed difference in A's grid with an LPS→RAS sform, gzip-compressed as `.nii.gz` when the browser supports CompressionStream. The grayscale overlay can be exported separately as a ZIP of 8-bit DICOM Secondary Capture slices on B's grid; it is a display image, not quantitative intensities or the signed difference. JSON preserves parameters, settings and geometry. Exports may contain study geometry or series descriptions; the app never uploads them.
 - Treat JSON exports as potentially identifying: series descriptions, frame-of-reference UIDs and geometry are not anonymized. Files are saved locally, not uploaded by the application.
 - The first view uses an explicitly labelled analytic synthetic phantom; it is not a clinical examination. Its known A→B transform is `[5, -3, 2]` mm and `[1.5, -1, 3]` degrees. A focal intensity change is intentionally retained after alignment.
 
