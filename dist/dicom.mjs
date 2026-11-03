@@ -64,14 +64,18 @@ export function parseFile(bytes,name,parser=globalThis.dicomParser,metadataOnly=
       thickness:scalar(measures,'x00180088',scalar(ds,'x00180088',scalar(measures,'x00180050',scalar(ds,'x00180050',1))))});
   }
   const uid=ds.string('x0020000e');if(!uid)throw Error('Нет SeriesInstanceUID.');
+  const study={studyUID:ds.string('x0020000d')||'',patientName:ds.string('x00100010')||'',patientID:ds.string('x00100020')||'',patientBirthDate:ds.string('x00100030')||'',patientSex:ds.string('x00100040')||'',studyDate:ds.string('x00080020')||'',studyTime:ds.string('x00080030')||'',accessionNumber:ds.string('x00080050')||'',studyID:ds.string('x00200010')||''};
   const key=[uid,ds.string('x00180086')||'',ds.string('x00200100')||'',ds.string('x00080008')||''].join('|');
-  return {key,frames,name:ds.string('x0008103e')||ds.string('x00181030')||'DICOM-серия',modality:ds.string('x00080060')||'DICOM',series:ds.string('x00200011')||'',echo:ds.string('x00180086')||'',frameUID:ds.string('x00200052')||'',ts:ds.string('x00020010')||'1.2.840.10008.1.2',...seriesDate(ds)};
+  return {key,frames,study,name:ds.string('x0008103e')||ds.string('x00181030')||'DICOM-серия',modality:ds.string('x00080060')||'DICOM',series:ds.string('x00200011')||'',echo:ds.string('x00180086')||'',frameUID:ds.string('x00200052')||'',ts:ds.string('x00020010')||'1.2.840.10008.1.2',...seriesDate(ds)};
 }
 export function groupParsed(parsed){
   const groups=new Map();
   for(const item of parsed.filter(Boolean)){
     if(!groups.has(item.key)){groups.set(item.key,{...item,frames:[...item.frames]});continue;}
-    const group=groups.get(item.key);group.frames.push(...item.frames);
+    const group=groups.get(item.key);
+    if(group.study.studyUID!==item.study.studyUID)throw Error('Один SeriesInstanceUID относится к разным StudyInstanceUID.');
+    if(group.frameUID!==item.frameUID||group.study.patientID!==item.study.patientID)throw Error('Серия содержит противоречивые идентификаторы пациента или геометрии.');
+    group.frames.push(...item.frames);
     if(group.dateSource==='mixed'||!item.date)continue;
     if(!group.date){group.date=item.date;group.dateSource=item.dateSource;}
     else if(group.date!==item.date){group.date=null;group.dateSource='mixed';}
@@ -224,7 +228,7 @@ export async function buildVolume(g,{onProgress=()=>{},...options}={}){
     }
     previous=current;onProgress((i+1)/geo.frames.length);
   }
-  const v={dims,matrix,origin,data,name:g.name,modality:g.modality,frameUID:g.frameUID,ts:g.ts,date:g.date,dateSource:g.dateSource,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
+  const v={dims,matrix,origin,data,name:g.name,modality:g.modality,study:g.study,frameUID:g.frameUID,ts:g.ts,date:g.date,dateSource:g.dateSource,synthetic:false,sliceThicknessMm:geo.frames[0].sliceThicknessMm};
   v.stats=statistics(v);
   const ds=geo.frames[0].ds,wl=scalar(ds,'x00281050',NaN),ww=scalar(ds,'x00281051',NaN);
   v.window=Number.isFinite(wl)&&ww>=1?{level:wl,width:ww}:{level:v.stats.level,width:v.stats.width};

@@ -5,9 +5,11 @@ import {sourcePlane,planeMapping} from './orientation.mjs';
 import {displayExtent,displayPlane} from './display-grid.mjs?v=1.1.7-grid1';
 import {imageBounds,pointerToImage,isRevealed} from './comparison-window.mjs';
 import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignment.mjs?v=1.1.0-fusion1';
-import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.1.0-boojum1';
+import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.2.0-overlay1';
+import {createBGridOverlay} from './overlay-b.mjs?v=1.2.0-overlay1';
+import {createOverlayDicomZipAsync} from './overlay-dicom.mjs?v=1.2.0-overlay2';
 import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage} from './localization.mjs?v=1.1.9-simple1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage,translate} from './localization.mjs?v=1.2.0-overlay1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.8-warnings1';
 import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date3';
 import {averageResultSlab} from './result-slab.mjs?v=1.1.8-slab1';
@@ -19,7 +21,7 @@ for(const [id,lang] of [['langEn','en'],['langRu','ru']]){$(id).href=languageUrl
 const translatedIds=new Set(['toast','regStatus','resampleStatus','gridA','gridB','gridTarget','gridAMeta','gridBMeta','gridTargetMeta','labelA','labelB','grayNote','scanSummary','registrationReport','warningNotice','registerBtn','exportNifti']);
 const uiObserver=new MutationObserver(records=>{if(language==='ru')return;for(const record of records){const el=record.target.nodeType===3?record.target.parentElement:record.target;const root=el?.closest?.('[id]');if(!root||!translatedIds.has(root.id))continue;const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(root.dataset.patientName==='true')continue;const text=localizeMessage(node.nodeValue,language);if(text!==node.nodeValue)node.nodeValue=text;}}});
 uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},zipCache:null,loading:new Set(),demo:false};
+const state={a:null,b:null,bOnA:null,resampleWorker:null,resampleTimer:null,resampleBusy:false,manualDragging:false,params:[0,0,0,0,0,0],windows:{a:{level:500,width:1000},b:{level:500,width:1000}},plane:'axial',slice:0,overlaySlice:0,display:'difference',reveal:{x:.5,y:.5},zoom:1,registration:null,registrationStage:'not-run',hasCompletedRegistration:false,regWorker:null,loadWorkers:{},zipCache:null,loading:new Set(),demo:false};
 for(const [id,lang] of [['langEn','en'],['langRu','ru']])$(id).addEventListener('click',event=>{
   if(lang===language){event.preventDefault();return;}
   const unsaved=!!(state.loading.size||(state.a&&!state.a?.synthetic)||(state.b&&!state.b?.synthetic)||state.registration||state.params.some(x=>x!==0));
@@ -30,7 +32,7 @@ const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString(lan
 function toast(message,error=false){$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,error?16000:6000);}
 function regStatus(text,type=''){const e=$('regStatus');e.replaceChildren();const dot=document.createElement('span');dot.className='status-dot '+type;const label=document.createElement('span');label.textContent=text;e.append(dot,label);}
 function setRegistrationStage(event,quality){state.registrationStage=nextRegistrationState(state.registrationStage,event,state.hasCompletedRegistration);if(event==='volume')state.hasCompletedRegistration=false;if(event==='success')state.hasCompletedRegistration=true;regStatus(registrationStatusText(state.registrationStage),quality||(state.registrationStage==='complete'?'success':state.registrationStage==='not-run'?'':'warning'));}
-function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('metric').disabled=!!state.regWorker;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
+function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('metric').disabled=!!state.regWorker;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;$('exportOverlayDicom').disabled=!ready||loading||!!state.regWorker||!!state.b?.synthetic||!state.b?.study?.studyUID||!state.b?.frameUID||state.display!=='blend'||$('overlayLut').value!=='gray';document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
 function updateGridInfo(){
   const both=!!(state.a&&state.b);$('geometryStrip').hidden=!both;
   for(const slot of ['a','b']){
@@ -97,14 +99,23 @@ function setVolume(slot,volume){
   const label=$('label'+up);label.dataset.patientName=volume.synthetic?'false':'true';label.textContent=volume.synthetic?'':volume.name;label.title=volume.synthetic?'':volume.name;$('dot'+up).classList.add('loaded');
   const name=$('name'+up);name.hidden=!!volume.synthetic;name.textContent=volume.synthetic?'':volume.name;name.title=volume.synthetic?'':volume.name;
   const date=$('date'+up);date.hidden=!!volume.synthetic;date.textContent=volume.synthetic?'':formatSeriesDate(volume,language);date.title=volume.synthetic?'':seriesDateSource(volume,language);
-  resetRegistration('volume');resetView();updateWarnings();updateButtons();
+  resetRegistration('volume');resetView();configureOverlaySlice(true);updateWarnings();updateButtons();
 }
 function resetView(){state.zoom=1;const v=state.a||state.b;if(v)state.slice=Math.floor(sliceCount(v)/2);configureSlice();requestRender();}
 function sliceCount(v){return v.dims[planeMapping(v,state.plane,0).normalAxis];}
 let manualExtent=null;
 function viewExtent(){if($('manualMode').checked&&manualExtent)return manualExtent;return state.a?displayExtent(state.a,state.b,state.params,state.plane):state.b?displayExtent(state.b,null,state.params,state.plane):null;}
 function configureSlice(){const extent=viewExtent();if(!extent){$('sliceSlider').disabled=true;$('sliceSlider').min=0;$('sliceSlider').max=0;$('sliceNumber').textContent='— / —';return;}state.slice=clamp(Math.round(state.slice),extent.min,extent.max);$('sliceSlider').disabled=false;$('sliceSlider').min=extent.min;$('sliceSlider').max=extent.max;$('sliceSlider').value=state.slice;$('sliceNumber').textContent=(state.slice-extent.min+1)+' / '+(extent.max-extent.min+1);}
+function configureOverlaySlice(reset=false){
+  const b=state.b,slider=$('overlaySlice');
+  if(!b){slider.disabled=true;slider.min=slider.max=slider.value=0;$('overlaySliceValue').textContent='—';return;}
+  const axis=planeMapping(b,state.plane,0).normalAxis,n=b.dims[axis];
+  state.overlaySlice=reset?Math.floor(n/2):clamp(state.overlaySlice,0,n-1);
+  slider.disabled=false;slider.min=0;slider.max=n-1;slider.value=state.overlaySlice;
+  $('overlaySliceValue').textContent=(state.overlaySlice+1)+' / '+n;
+}
 function stepSlice(delta){if(!(state.a||state.b))return;state.slice+=delta;configureSlice();requestRender();}
+function stepOverlaySlice(delta){if(!state.b)return;state.overlaySlice+=delta;configureOverlaySlice();requestRender();}
 function requestRender(){if(!renderFrame)renderFrame=requestAnimationFrame(()=>{renderFrame=null;render();});}
 function planeInfo(v){
   const extent=viewExtent();return extent?displayPlane(v,state.plane,state.slice,extent):planeMapping(v,state.plane,state.slice);
@@ -133,7 +144,8 @@ function render(){
   if(!base)return;
   const pi=planeInfo(base),[nx,ny]=base.dims,map=state.a&&state.b?samplingMap(state.a,state.b,state.params):null;
   const images={};for(const key of ['a','b','r']){offscreen[key].width=pi.w;offscreen[key].height=pi.h;images[key]=offscreen[key].getContext('2d').createImageData(pi.w,pi.h);}
-  if(state.display==='blend'){offscreen.fusion.width=pi.w;offscreen.fusion.height=pi.h;images.fusion=offscreen.fusion.getContext('2d').createImageData(pi.w,pi.h);}
+  const grayPreview=!!(state.a&&state.b&&state.display==='blend'&&$('overlayLut').value==='gray');
+  if(state.display==='blend'&&!grayPreview){offscreen.fusion.width=pi.w;offscreen.fusion.height=pi.h;images.fusion=offscreen.fusion.getContext('2d').createImageData(pi.w,pi.h);}
   const sign=Number($('sign').value),palette=$('palette').value,windowSize=Number($('windowSize').value)/100;
   const fusionOpacity=Number($('fusionOpacity').value)/100,fusionThreshold=Number($('fusionThreshold').value)/100,variableAlpha=$('fusionVariableAlpha').checked,slabCount=Number($('resultSlab').value);
   const readResult=q=>{
@@ -145,6 +157,7 @@ function render(){
     const wa=windowValue(av,state.windows.a.level,state.windows.a.width),wb=windowValue(bv,state.windows.b.level,state.windows.b.width);
     for(const [key,value]of [['a',wa],['b',wb]]){const d=images[key].data,g=Number.isFinite(value)?Math.round(value*255):9;d[i]=d[i+1]=d[i+2]=g;d[i+3]=255;}
     const d=images.r.data;d[i+3]=255;
+    if(grayPreview)continue;
     if(state.display==='window'){
       const inside=isRevealed(u,v,pi.w,pi.h,state.reveal,windowSize),value=inside?wb:wa;
       const g=Number.isFinite(value)?Math.round(value*255):((u>>3)+(v>>3))%2?13:18;
@@ -162,14 +175,26 @@ function render(){
       const g=palette==='absolute'?Math.abs(t)*255:(t+1)*127.5;d[i]=d[i+1]=d[i+2]=g;
     }
   }
+  let resultPi=pi;
+  if(grayPreview){
+    resultPi=planeMapping(state.b,state.plane,state.overlaySlice);
+    offscreen.r.width=resultPi.w;offscreen.r.height=resultPi.h;
+    const preview=offscreen.r.getContext('2d').createImageData(resultPi.w,resultPi.h);
+    const overlay=createBGridOverlay(state.a,state.b,state.params,{windows:state.windows,opacity:fusionOpacity,threshold:fusionThreshold,variableAlpha});
+    for(let v=0;v<resultPi.h;v++)for(let u=0;u<resultPi.w;u++){
+      const q=resultPi.voxel(u,v),g=overlay.at(...q),i=(v*resultPi.w+u)*4;
+      preview.data[i]=preview.data[i+1]=preview.data[i+2]=g;preview.data[i+3]=255;
+    }
+    images.r=preview;
+  }
   if(images.fusion)offscreen.fusion.getContext('2d').putImageData(images.fusion,0,0);
   if(base)positionRotationHandles(canvases.r,imageBounds(canvases.r,planeInfo(base),state.zoom));
   for(const key of ['a','b','r']){
     const canvas=canvases[key],ctx=canvas.getContext('2d'),off=offscreen[key];if((key==='a'&&!state.a)||(key==='b'&&!state.b)||(key==='r'&&!(state.a&&state.b)))continue;
     off.getContext('2d').putImageData(images[key],0,0);
-    const bounds=imageBounds(canvas,pi,state.zoom);
+    const plane=key==='r'?resultPi:pi,bounds=imageBounds(canvas,plane,state.zoom);
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(off,bounds.x,bounds.y,bounds.w,bounds.h);
-    for(const [label,axis]of [['Top',pi.v.map(x=>-x)],['Bottom',pi.v],['Left',pi.u.map(x=>-x)],['Right',pi.u]])$(key+label).textContent=orientationLabel(axis);
+    for(const [label,axis]of [['Top',plane.v.map(x=>-x)],['Bottom',plane.v],['Left',plane.u.map(x=>-x)],['Right',plane.u]])$(key+label).textContent=orientationLabel(axis);
     if(key!=='r')$('info'+key.toUpperCase()).textContent=pi.w+' × '+pi.h+'\n'+format(pi.sx,2)+' × '+format(pi.sy,2)+' mm';
   }
 
@@ -262,6 +287,21 @@ async function exportNifti(){
     if(niftiUrl)URL.revokeObjectURL(niftiUrl);niftiUrl=URL.createObjectURL(blob);$('niftiDownloadLink').href=niftiUrl;$('niftiDownloadLink').download=filename;$('downloadDialog').showModal();
   }catch(e){toast(e.message||String(e),true);}finally{button.innerHTML=old;updateButtons();}
 }
+async function exportOverlayDicom(){
+  if($('exportOverlayDicom').disabled)return;
+  const button=$('exportOverlayDicom'),old=button.innerHTML;
+  button.disabled=true;button.textContent='Экспорт DICOM…';
+  try{
+    const b=state.b,overlay=createBGridOverlay(state.a,b,[...state.params],{
+      windows:structuredClone(state.windows),opacity:Number($('fusionOpacity').value)/100,
+      threshold:Number($('fusionThreshold').value)/100,variableAlpha:$('fusionVariableAlpha').checked
+    });
+    const blob=await createOverlayDicomZipAsync({volume:b,study:b.study,renderSlice:z=>overlay.slice(z),
+      onProgress:(completed,total)=>{button.textContent=translate('DICOM · наложение',language)+' · '+Math.round(completed/total*100)+'%';}
+    });
+    saveBlob(blob,'subtract-overlay-b.zip');
+  }catch(e){toast(e.message||String(e),true);}finally{button.innerHTML=old;updateButtons();}
+}
 document.querySelectorAll('[data-pick]').forEach(btn=>btn.addEventListener('click',()=>{pickSlot=btn.dataset.pick;const input=$(btn.dataset.kind==='folder'?'folderInput':'fileInput');input.value='';input.click();}));
 for(const id of ['fileInput','folderInput'])$(id).addEventListener('change',e=>loadFiles(pickSlot,e.target.files));
 for(const slot of ['a','b']){
@@ -280,21 +320,23 @@ document.querySelectorAll('[data-auto]').forEach(btn=>btn.addEventListener('clic
 $('manualMode').addEventListener('change',()=>{if($('manualMode').checked&&state.regWorker)stopRegistration(false);if($('manualMode').checked)document.querySelector('[data-display="difference"]').click();else{manualExtent=null;configureSlice();requestRender();}$('manualHint').hidden=!$('manualMode').checked;document.querySelectorAll('[data-rotate-handle]').forEach(h=>h.hidden=!$('manualMode').checked);canvases.r.parentElement.classList.toggle('manual-active',$('manualMode').checked);updateButtons();});
 $('metric').addEventListener('change',()=>{setRegistrationStage('metric');$('registrationReport').hidden=true;});
 $('antiAlias').addEventListener('change',()=>scheduleResampling());
-document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;manualExtent=null;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();updateWarnings();}));
-document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('slabControl').hidden=state.display!=='difference';$('resultSlab').disabled=state.display!=='difference';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');requestRender();}));
+document.querySelectorAll('[data-plane]').forEach(btn=>btn.addEventListener('click',()=>{state.plane=btn.dataset.plane;manualExtent=null;document.querySelectorAll('[data-plane]').forEach(b=>b.classList.toggle('active',b===btn));resetView();configureOverlaySlice(true);updateWarnings();}));
+document.querySelectorAll('[data-display]').forEach(btn=>btn.addEventListener('click',()=>{state.display=btn.dataset.display;if(state.display!=='difference'&&$('manualMode').checked)cancelManualMode();document.querySelectorAll('[data-display]').forEach(b=>b.classList.toggle('active',b===btn));const blend=state.display==='blend';$('slabControl').hidden=state.display!=='difference';$('resultSlab').disabled=state.display!=='difference';$('revealControls').hidden=state.display!=='window';$('fusionControls').hidden=!blend;$('overlayLutControl').hidden=!blend;$('overlaySliceControl').hidden=!blend||$('overlayLut').value!=='gray';$('grayNote').hidden=blend;canvases.r.parentElement.classList.toggle('reveal-active',state.display==='window');updateButtons();requestRender();}));
 $('resultSlab').addEventListener('change',requestRender);
 $('windowSize').addEventListener('input',e=>{$('windowSizeValue').textContent=e.target.value+'%';requestRender();});
+$('overlayLut').addEventListener('change',()=>{$('overlaySliceControl').hidden=$('overlayLut').value!=='gray';updateButtons();requestRender();});
+$('overlaySlice').addEventListener('input',e=>{state.overlaySlice=Number(e.target.value);configureOverlaySlice();requestRender();});
 $('fusionOpacity').addEventListener('input',e=>{$('fusionOpacityValue').textContent=e.target.value+'%';requestRender();});
 $('fusionThreshold').addEventListener('input',e=>{$('fusionThresholdValue').textContent=e.target.value+'%';requestRender();});
 $('fusionVariableAlpha').addEventListener('change',e=>{$('fusionThreshold').disabled=!e.target.checked;requestRender();});
 for(const id of ['sign','palette'])$(id).addEventListener('input',requestRender);
 $('sliceSlider').addEventListener('input',e=>{state.slice=Number(e.target.value);configureSlice();requestRender();});$('prevSlice').addEventListener('click',()=>stepSlice(-1));$('nextSlice').addEventListener('click',()=>stepSlice(1));
 $('fitBtn').addEventListener('click',()=>{state.zoom=1;requestRender();});$('registerBtn').addEventListener('click',startRegistration);$('resetTransform').addEventListener('click',()=>{resetRegistration();requestRender();});$('demoBtn').addEventListener('click',demo);$('clearBtn').addEventListener('click',()=>clearAll());
-$('exportTransform').addEventListener('click',exportTransform);$('exportNifti').addEventListener('click',exportNifti);$('exportPng').addEventListener('click',()=>{render();canvases.r.toBlob(blob=>{if(blob)saveBlob(blob,'subtract-'+state.plane+'-'+(state.slice+1)+'.png');});});
+$('exportTransform').addEventListener('click',exportTransform);$('exportNifti').addEventListener('click',exportNifti);$('exportOverlayDicom').addEventListener('click',exportOverlayDicom);$('exportPng').addEventListener('click',()=>{render();canvases.r.toBlob(blob=>{if(blob)saveBlob(blob,'subtract-'+state.plane+'-'+(state.slice+1)+'.png');});});
 $('helpBtn').addEventListener('click',()=>$('helpDialog').showModal());$('closeHelp').addEventListener('click',()=>$('helpDialog').close());$('closeSeries').addEventListener('click',cancelScan);$('seriesDialog').addEventListener('cancel',cancelScan);
 $('closeDownload').addEventListener('click',()=>$('downloadDialog').close());
 for(const key of ['a','b','r']){
-  const wrap=canvases[key].parentElement;wrap.addEventListener('wheel',e=>{e.preventDefault();stepSlice(e.deltaY>0?1:-1);},{passive:false});let drag=null;
+  const wrap=canvases[key].parentElement;wrap.addEventListener('wheel',e=>{e.preventDefault();const delta=e.deltaY>0?1:-1;if(key==='r'&&state.display==='blend'&&$('overlayLut').value==='gray')stepOverlaySlice(delta);else stepSlice(delta);},{passive:false});let drag=null;
   const moveWindow=e=>{if(key!=='r'||state.display!=='window'||!(state.a&&state.b))return;const canvas=canvases.r,rect=canvas.getBoundingClientRect();state.reveal=pointerToImage((e.clientX-rect.left)*canvas.width/rect.width,(e.clientY-rect.top)*canvas.height/rect.height,canvas,planeInfo(state.a),state.zoom);requestRender();};
   wrap.addEventListener('pointerdown',e=>{if(!(state.a||state.b))return;if(key==='r'&&$('manualMode').checked&&state.a&&state.b&&!e.shiftKey){
     const canvas=canvases.r,rect=canvas.getBoundingClientRect(),start={x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height};
