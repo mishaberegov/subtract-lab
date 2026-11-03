@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nextRegistrationState,registrationStatusText} from '../dist/registration-status.mjs';
+import {nextRegistrationState,registrationStatusText,registrationFeedback} from '../dist/registration-status.mjs';
 import {translate} from '../dist/localization.mjs';
 import {readFileSync} from 'node:fs';
 
@@ -37,4 +37,28 @@ test('UI routes metric changes, manual adjustment, completed runs and series rep
   assert.match(app,/function invalidateRegistration\(\)[\s\S]*?setRegistrationStage\('manual'\)/);
   assert.match(app,/data\.type==='done'[\s\S]*?setRegistrationStage\('success'/);
   assert.match(app,/resetRegistration\('volume'\)/);
+});
+test('completed MI and NCC runs get neutral status regardless of NCC',()=>{
+  for(const ncc of [-.9,.2,.95]){
+    const feedback=registrationFeedback({score:.7,overlap:.8,n:500,ncc});
+    assert.equal(feedback.type,'');
+    assert.match(feedback.note,/нескольких срезах/);
+    assert.notEqual(translate(feedback.note,'en'),feedback.note);
+  }
+  const app=readFileSync(new URL('../dist/app.mjs',import.meta.url),'utf8');
+  assert.match(app,/registrationFeedback\(r\.after\)/);
+  assert.doesNotMatch(app,/after\.ncc\s*>/);
+});
+test('insufficient samples or invalid objective cause a warning',()=>{
+  for(const after of [{score:-10,overlap:.34,n:200},{score:-10,overlap:.8,n:39},{score:NaN,overlap:.8,n:200}]){
+    const feedback=registrationFeedback(after);
+    assert.equal(feedback.type,'warning');
+    assert.notEqual(translate(feedback.note,'en'),feedback.note);
+  }
+});
+test('limited but valid sampled overlap is a caution, not failed registration',()=>{
+  const feedback=registrationFeedback({score:.3,overlap:.5,n:200,ncc:0});
+  assert.equal(feedback.type,'');
+  assert.match(feedback.note,/перекрытие/);
+  assert.notEqual(translate(feedback.note,'en'),feedback.note);
 });

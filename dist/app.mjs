@@ -8,8 +8,8 @@ import {dragTranslation,rotateInPlane,rotationDragDegrees} from './manual-alignm
 import {fusionColor,fusionAlpha,composeFusion} from './fusion.mjs?v=1.2.0-overlay1';
 import {createBGridOverlay} from './overlay-b.mjs?v=1.2.0-overlay1';
 import {createOverlayDicomZipAsync} from './overlay-dicom.mjs?v=1.2.0-overlay2';
-import {nextRegistrationState,registrationStatusText} from './registration-status.mjs?v=1.1.0-l10n5';
-import {languageFromUrl,languageUrl,localizeDocument,localizeMessage,translate} from './localization.mjs?v=1.2.0-overlay1';
+import {nextRegistrationState,registrationStatusText,registrationFeedback} from './registration-status.mjs?v=1.2.0-quality1';
+import {languageFromUrl,languageUrl,localizeDocument,localizeMessage,translate} from './localization.mjs?v=1.2.0-quality1';
 import {formatWarningLines} from './warnings.mjs?v=1.1.8-warnings1';
 import {formatSeriesDate,seriesDateSource} from './series-date.mjs?v=1.1.7-date3';
 import {averageResultSlab} from './result-slab.mjs?v=1.1.8-slab1';
@@ -31,7 +31,7 @@ let toastTimer,renderFrame,pickSlot='a',activeScan=null,niftiUrl=null;
 const format=(x,n=1)=>Number.isFinite(x)?Number(x.toFixed(n)).toLocaleString(language==='ru'?'ru-RU':'en-US'):'—';
 function toast(message,error=false){$('toast').textContent=message;$('toast').classList.toggle('error',error);$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,error?16000:6000);}
 function regStatus(text,type=''){const e=$('regStatus');e.replaceChildren();const dot=document.createElement('span');dot.className='status-dot '+type;const label=document.createElement('span');label.textContent=text;e.append(dot,label);}
-function setRegistrationStage(event,quality){state.registrationStage=nextRegistrationState(state.registrationStage,event,state.hasCompletedRegistration);if(event==='volume')state.hasCompletedRegistration=false;if(event==='success')state.hasCompletedRegistration=true;regStatus(registrationStatusText(state.registrationStage),quality||(state.registrationStage==='complete'?'success':state.registrationStage==='not-run'?'':'warning'));}
+function setRegistrationStage(event,quality){state.registrationStage=nextRegistrationState(state.registrationStage,event,state.hasCompletedRegistration);if(event==='volume')state.hasCompletedRegistration=false;if(event==='success')state.hasCompletedRegistration=true;regStatus(registrationStatusText(state.registrationStage),quality??(state.registrationStage==='complete'?'':state.registrationStage==='not-run'?'':'warning'));}
 function updateButtons(){const both=!!(state.a&&state.b),loading=state.loading.size>0,ready=both&&!!state.bOnA&&!state.resampleBusy&&!state.manualDragging; $('registerBtn').disabled=!both||loading||state.manualDragging;$('metric').disabled=!!state.regWorker;$('manualMode').disabled=!ready||loading||!!state.regWorker;$('exportPng').disabled=!ready||loading||!!state.regWorker;$('exportTransform').disabled=!ready||loading||!!state.regWorker;$('exportNifti').disabled=!ready||loading||!!state.regWorker;$('exportOverlayDicom').disabled=!ready||loading||!!state.regWorker||!!state.b?.synthetic||!state.b?.study?.studyUID||!state.b?.frameUID||state.display!=='blend'||$('overlayLut').value!=='gray';document.querySelectorAll('[data-auto]').forEach(b=>b.disabled=!state[b.dataset.auto]);}
 function updateGridInfo(){
   const both=!!(state.a&&state.b);$('geometryStrip').hidden=!both;
@@ -245,9 +245,9 @@ function startRegistration(){
   worker.onmessage=({data})=>{
     if(data.type==='progress'){$('regProgress').firstElementChild.style.width=Math.max(2,Math.round(data.fraction*100))+'%';regStatus('Уровень '+data.level+' / '+data.levels+' · '+Math.round(data.fraction*100)+'%');}
     if(data.type==='done'){
-      state.params=data.result.params;state.registration=data.result;stopRegistration(false);configureSlice();updateWarnings();scheduleResampling();const r=data.result,good=r.after.overlap>.65&&r.after.ncc>.75;
-      setRegistrationStage('success',good?'success':'warning');
-      $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выборки '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+(good?'Проверь границы в режиме «Форточка».':'Совмещение требует визуальной проверки; при необходимости уточни вручную.');
+      state.params=data.result.params;state.registration=data.result;stopRegistration(false);configureSlice();updateWarnings();scheduleResampling();const r=data.result,feedback=registrationFeedback(r.after);
+      setRegistrationStage('success',feedback.type);
+      $('registrationReport').hidden=false;$('registrationReport').textContent='Корегистрация '+r.method.toUpperCase()+' · метрика '+format(r.before.score,4)+' → '+format(r.after.score,4)+' · перекрытие выбранных точек '+format(r.after.overlap*100,1)+'%. Смещение A → B: '+r.params.slice(0,3).map(x=>format(x,2)).join(' / ')+' мм; вращение: '+r.params.slice(3).map(x=>format(x,2)).join(' / ')+'°. '+feedback.note;
       requestRender();
     }
     if(data.type==='error'){stopRegistration();toast(data.message,true);}

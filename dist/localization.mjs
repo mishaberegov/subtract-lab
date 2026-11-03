@@ -72,6 +72,12 @@ Object.assign(copy,{
 'Один SeriesInstanceUID относится к разным StudyInstanceUID.':'One SeriesInstanceUID belongs to multiple studies.',
 'Серия содержит противоречивые идентификаторы пациента или геометрии.':'Series has conflicting patient or geometry identifiers.'
 });
+Object.assign(copy,{
+'перекрытие выбранных точек':'selected-point overlap',
+'Недостаточно совпадающих точек для надёжной оценки. Проверь совмещение вручную.':'Too few matching points for a reliable estimate. Check alignment manually.',
+'Ограниченное перекрытие выбранных точек; проверь совмещение в нескольких срезах и плоскостях.':'Limited overlap among selected points; check alignment across several slices and planes.',
+'Проверь совмещение в нескольких срезах и плоскостях; метрика не гарантирует точность.':'Check alignment across several slices and planes; the metric does not guarantee accuracy.'
+});
 export function languageFromUrl(url){return new URL(url).searchParams.get('lang')==='ru'?'ru':'en';}
 export function languageUrl(url,language){const u=new URL(url);if(language==='ru')u.searchParams.set('lang','ru');else u.searchParams.delete('lang');return u.pathname+u.search+u.hash;}
 export const staticEnglish=text=>copy[text]??text;

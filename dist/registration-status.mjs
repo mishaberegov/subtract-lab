@@ -5,6 +5,13 @@ const text={
   manual:'Серия B смещена вручную'
 };
 export function registrationStatusText(state){return text[state];}
+export function registrationFeedback(after){
+  if(!Number.isFinite(after.score)||!Number.isFinite(after.overlap)||after.overlap<.35||after.n<40)
+    return {type:'warning',note:'Недостаточно совпадающих точек для надёжной оценки. Проверь совмещение вручную.'};
+  if(after.overlap<.65)
+    return {type:'',note:'Ограниченное перекрытие выбранных точек; проверь совмещение в нескольких срезах и плоскостях.'};
+  return {type:'',note:'Проверь совмещение в нескольких срезах и плоскостях; метрика не гарантирует точность.'};
+}
 export function nextRegistrationState(current,event,hasCompleted=false){
   if(event==='volume')return 'not-run';
   if(event==='success')return 'complete';
