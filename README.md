@@ -18,6 +18,12 @@ The screenshot shows two MRI series, not the app's synthetic demo. A bright or d
 
 Serve `dist/` from an HTTP server; ES modules and workers do not work reliably over `file://`. There is no build step. `npm ci` installs development dependencies and `npm test` runs the computational and DICOM tests. Static vendored assets are committed for deployment. The interface defaults to English; append `?lang=ru` for Russian. Changing language reloads the page, so save or export your work first; loaded real series and non-default alignment trigger a confirmation. The built-in demo is labelled as synthetic data.
 
+### Working on the code
+
+`dist/app.mjs` owns workspace state, workers and UI events. `dist/renderer.mjs` draws the three viewers; `dist/export-actions.mjs` handles downloads. Geometry and registration live in `dist/core.mjs`, DICOM ingestion in `dist/dicom.mjs`, and the translation dictionary is split between `dist/localization-ui.mjs` and `dist/localization-messages.mjs`. Vendored codecs live in `dist/vendor/` and are not reformatted.
+
+Run `npm test` before changing behavior. `npm run format` formats first-party JavaScript, HTML, CSS, tests and the package configuration; `npm run format:check` checks the same files without writing them. Formatting is not a substitute for a fresh browser check of loading, registration and exports.
+
 ## Behavior
 
 - A is the fixed reference. A complete Float32 B-on-A volume is built in a Web Worker after loading, registration or manual correction. Its dimensions, voxel matrix, origin and frame of reference exactly match A. Slice rendering, subtraction and NIfTI export use this same volume. Original B is retained for registration; repeated corrections resample from the original, never from the last resampled output.

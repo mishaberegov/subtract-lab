@@ -10,7 +10,10 @@ function readZip(bytes) {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let eocd = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
-    if (v.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (v.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
   }
   assert.ok(eocd >= 0, 'ZIP end directory exists');
   const count = v.getUint16(eocd + 10, true);
@@ -39,8 +42,11 @@ function readDicom(bytes) {
   let p = 132;
   let metaEnd;
   while (p < bytes.length) {
-    if (metaEnd !== undefined && p >= metaEnd) assert.notEqual(v.getUint16(p, true), 2, 'meta group length is exact');
-    const key = [v.getUint16(p, true), v.getUint16(p + 2, true)].map(n => n.toString(16).padStart(4, '0')).join(',');
+    if (metaEnd !== undefined && p >= metaEnd)
+      assert.notEqual(v.getUint16(p, true), 2, 'meta group length is exact');
+    const key = [v.getUint16(p, true), v.getUint16(p + 2, true)]
+      .map(n => n.toString(16).padStart(4, '0'))
+      .join(',');
     const vr = decoder.decode(bytes.subarray(p + 4, p + 6));
     const long = ['OB', 'OD', 'OF', 'OL', 'OV', 'OW', 'SQ', 'UC', 'UR', 'UT', 'UN'].includes(vr);
     const length = v[long ? 'getUint32' : 'getUint16'](p + (long ? 8 : 6), true);
@@ -55,18 +61,39 @@ function readDicom(bytes) {
   return {
     tags,
     str: key => text(tags.get(key).value),
-    uint16: key => new DataView(tags.get(key).value.buffer, tags.get(key).value.byteOffset).getUint16(0, true),
+    uint16: key =>
+      new DataView(tags.get(key).value.buffer, tags.get(key).value.byteOffset).getUint16(0, true)
   };
 }
 const volume = {
-  dims: [3, 2, 2], matrix: [2, 0, 0, 0, 3, 0, 0, 0, 4],
-  origin: [11, -20, 30], sliceThicknessMm: 4, frameUID: '1.2.826.0.1.3680043.2.1125.1',
+  dims: [3, 2, 2],
+  matrix: [2, 0, 0, 0, 3, 0, 0, 0, 4],
+  origin: [11, -20, 30],
+  sliceThicknessMm: 4,
+  frameUID: '1.2.826.0.1.3680043.2.1125.1'
 };
-const study = { studyUID: '1.2.826.0.1.3680043.2.1125.2', patientName: 'SYNTHETIC^TEST', patientID: 'SYNTHETIC', patientBirthDate: '20000101', patientSex: 'O', studyDate: '20200102', studyTime: '121314', accessionNumber: 'SYNTHETIC', studyID: 'TEST' };
+const study = {
+  studyUID: '1.2.826.0.1.3680043.2.1125.2',
+  patientName: 'SYNTHETIC^TEST',
+  patientID: 'SYNTHETIC',
+  patientBirthDate: '20000101',
+  patientSex: 'O',
+  studyDate: '20200102',
+  studyTime: '121314',
+  accessionNumber: 'SYNTHETIC',
+  studyID: 'TEST'
+};
 
 test('exports readable two-slice stored ZIP with Part 10 SC pixels and geometry', async () => {
   const calls = [];
-  const blob = createOverlayDicomZip({ volume, study, renderSlice(z) { calls.push(z); return Uint8Array.from({ length: 6 }, (_, i) => z * 10 + i); } });
+  const blob = createOverlayDicomZip({
+    volume,
+    study,
+    renderSlice(z) {
+      calls.push(z);
+      return Uint8Array.from({ length: 6 }, (_, i) => z * 10 + i);
+    }
+  });
   assert.ok(blob instanceof Blob);
   const archive = new Uint8Array(await blob.arrayBuffer());
   const entries = readZip(archive);
@@ -76,7 +103,8 @@ test('exports readable two-slice stored ZIP with Part 10 SC pixels and geometry'
   assert.equal(entries.length, 2);
   assert.equal(new Set(entries.map(e => e.name)).size, 2);
   assert.deepEqual(calls, [0, 1]);
-  const series = new Set(), sop = new Set();
+  const series = new Set(),
+    sop = new Set();
   for (const [z, entry] of entries.entries()) {
     const d = readDicom(entry.bytes);
     const s = d.str;
@@ -106,8 +134,12 @@ test('exports readable two-slice stored ZIP with Part 10 SC pixels and geometry'
     assert.equal(s('0018,0050'), '4');
     assert.equal(s('0018,0088'), '4');
     assert.equal(s('0020,0013'), String(z + 1));
-    assert.deepEqual([...d.tags.get('7fe0,0010').value], [z * 10, z * 10 + 1, z * 10 + 2, z * 10 + 3, z * 10 + 4, z * 10 + 5]);
-    series.add(s('0020,000e')); sop.add(s('0008,0018'));
+    assert.deepEqual(
+      [...d.tags.get('7fe0,0010').value],
+      [z * 10, z * 10 + 1, z * 10 + 2, z * 10 + 3, z * 10 + 4, z * 10 + 5]
+    );
+    series.add(s('0020,000e'));
+    sop.add(s('0008,0018'));
   }
   assert.equal(series.size, 1);
   assert.equal(sop.size, 2);
@@ -116,35 +148,102 @@ test('exports readable two-slice stored ZIP with Part 10 SC pixels and geometry'
 });
 
 test('rejects missing UIDs and invalid geometry before rendering', () => {
-  const input = { volume, study, renderSlice: () => { throw Error('render must not run'); } };
-  assert.throws(() => createOverlayDicomZip({ ...input, study: { ...study, studyUID: '' } }), /studyUID/);
-  assert.throws(() => createOverlayDicomZip({ ...input, volume: { ...volume, frameUID: null } }), /frameUID/);
-  assert.throws(() => createOverlayDicomZip({ ...input, volume: { ...volume, dims: [3, 0, 2] } }), /geometry/);
-  assert.throws(() => createOverlayDicomZip({ ...input, volume: { ...volume, matrix: [[1, 1, 0], [0, 0, 0], [0, 0, 1]] } }), /geometry/);
-  assert.throws(() => createOverlayDicomZip({ ...input, volume: { ...volume, origin: [0, NaN, 0] } }), /geometry/);
+  const input = {
+    volume,
+    study,
+    renderSlice: () => {
+      throw Error('render must not run');
+    }
+  };
+  assert.throws(
+    () => createOverlayDicomZip({ ...input, study: { ...study, studyUID: '' } }),
+    /studyUID/
+  );
+  assert.throws(
+    () => createOverlayDicomZip({ ...input, volume: { ...volume, frameUID: null } }),
+    /frameUID/
+  );
+  assert.throws(
+    () => createOverlayDicomZip({ ...input, volume: { ...volume, dims: [3, 0, 2] } }),
+    /geometry/
+  );
+  assert.throws(
+    () =>
+      createOverlayDicomZip({
+        ...input,
+        volume: {
+          ...volume,
+          matrix: [
+            [1, 1, 0],
+            [0, 0, 0],
+            [0, 0, 1]
+          ]
+        }
+      }),
+    /geometry/
+  );
+  assert.throws(
+    () => createOverlayDicomZip({ ...input, volume: { ...volume, origin: [0, NaN, 0] } }),
+    /geometry/
+  );
 });
 
 test('rejects invalid render result and duplicate supplied UIDs', () => {
-  assert.throws(() => createOverlayDicomZip({ volume, study, renderSlice: () => new Uint8Array(3) }), /renderSlice/);
-  assert.throws(() => createOverlayDicomZip({ volume, study, renderSlice: () => new Array(6).fill(0) }), /renderSlice/);
-  assert.throws(() => createOverlayDicomZip({ volume, study, renderSlice: () => new Uint8Array(6), uidFactory: () => '2.25.42' }), /unique/);
+  assert.throws(
+    () => createOverlayDicomZip({ volume, study, renderSlice: () => new Uint8Array(3) }),
+    /renderSlice/
+  );
+  assert.throws(
+    () => createOverlayDicomZip({ volume, study, renderSlice: () => new Array(6).fill(0) }),
+    /renderSlice/
+  );
+  assert.throws(
+    () =>
+      createOverlayDicomZip({
+        volume,
+        study,
+        renderSlice: () => new Uint8Array(6),
+        uidFactory: () => '2.25.42'
+      }),
+    /unique/
+  );
 });
 
 test('async export yields between slices, reports progress, and writes a readable ZIP', async () => {
   const events = [];
-  const result = createOverlayDicomZipAsync({volume,study,renderSlice:z=>{
-    events.push(['render',z]);return new Uint8Array(6);
-  },onProgress:(completed,total)=>events.push(['progress',completed,total])});
+  const result = createOverlayDicomZipAsync({
+    volume,
+    study,
+    renderSlice: z => {
+      events.push(['render', z]);
+      return new Uint8Array(6);
+    },
+    onProgress: (completed, total) => events.push(['progress', completed, total])
+  });
   assert.ok(result instanceof Promise);
-  assert.deepEqual(events,[['render',0],['progress',1,2]]);
+  assert.deepEqual(events, [
+    ['render', 0],
+    ['progress', 1, 2]
+  ]);
   const archive = new Uint8Array(await (await result).arrayBuffer());
-  assert.equal(readZip(archive).length,2);
-  assert.deepEqual(events,[['render',0],['progress',1,2],['render',1],['progress',2,2]]);
+  assert.equal(readZip(archive).length, 2);
+  assert.deepEqual(events, [
+    ['render', 0],
+    ['progress', 1, 2],
+    ['render', 1],
+    ['progress', 2, 2]
+  ]);
 });
 
 test('new export uses new series UID; odd pixel count is padded and oblique geometry stays in B space', async () => {
-  const oblique = { ...volume, dims: [1, 3, 1], matrix: [0, -2, 0, 3, 0, 0, 0, 0, 5], origin: [7, 8, 9] };
-  const make = () => createOverlayDicomZip({ volume: oblique, study, renderSlice: () => Uint8Array.of(20, 30, 40) });
+  const oblique = {
+    ...volume,
+    dims: [1, 3, 1],
+    matrix: [0, -2, 0, 3, 0, 0, 0, 0, 5],
+    origin: [7, 8, 9]
+  };
+  const make = () =>
+    createOverlayDicomZip({ volume: oblique, study, renderSlice: () => Uint8Array.of(20, 30, 40) });
   const first = readDicom(readZip(new Uint8Array(await make().arrayBuffer()))[0].bytes);
   const second = readDicom(readZip(new Uint8Array(await make().arrayBuffer()))[0].bytes);
   assert.notEqual(first.str('0020,000e'), second.str('0020,000e'));
