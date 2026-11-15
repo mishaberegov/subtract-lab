@@ -44,10 +44,24 @@ test('result toolbar reserves its height and centers the averaging control', () 
   );
   assert.match(
     css,
-    /\.manual-toolbar\{[^}]*display:grid;[^}]*grid-template-columns:auto minmax\(0,1fr\)\s*auto;[^}]*height:43px/
+    /\.manual-toolbar\{[^}]*display:grid;[^}]*grid-template-columns:var\(--result-control-columns\);[^}]*height:43px/
   );
   assert.match(css, /\.slab-control\{[^}]*justify-self:center/);
   assert.match(css, /@media\(max-width:400px\)\{\.manual-toolbar\{[^}]*height:80px/);
+});
+test('registration and manual controls share left and middle grid columns', () => {
+  const css = compactCss(
+    readFileSync(new URL('../dist/viewer-layout.css', import.meta.url), 'utf8')
+  );
+  assert.match(css, /\.result-viewport\{[^}]*--result-control-columns:/);
+  assert.match(
+    css,
+    /\.result-viewport \.viewport-title\{[^}]*grid-template-columns:var\(--result-control-columns\)/
+  );
+  assert.match(
+    css,
+    /@container result-viewer\(max-width:510px\)\{[\s\S]*?\.modality-toggle\{grid-column:2;grid-row:2/
+  );
 });
 test('result-only slab is selectable in three modes and does not change NIfTI or registration', () => {
   assert.match(html, /id="resultSlab"[^>]*>[\s\S]*?value="1"[\s\S]*?value="3"[\s\S]*?value="5"/);
