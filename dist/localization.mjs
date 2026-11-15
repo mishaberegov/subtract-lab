@@ -1,4 +1,4 @@
-import { baseCopy } from './localization-ui.mjs';
+import { baseCopy } from './localization-ui.mjs?v=1.2.1-modality1';
 import { addMessageCopy } from './localization-messages.mjs';
 
 // Keep one public dictionary and insertion order for longest-fragment substitution.
