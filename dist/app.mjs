@@ -12,14 +12,15 @@ import {
 import {
   nextRegistrationState,
   registrationStatusText,
-  registrationFeedback
-} from './registration-status.mjs?v=1.2.0-quality1';
+  registrationFeedback,
+  registrationMethodFromModality
+} from './registration-status.mjs?v=1.2.1-modality1';
 import {
   languageFromUrl,
   languageUrl,
   localizeDocument,
   localizeMessage
-} from './localization.mjs?v=1.2.0-readable1';
+} from './localization.mjs?v=1.2.1-modality1';
 import { formatWarningLines } from './warnings.mjs?v=1.1.8-warnings1';
 import { formatSeriesDate, seriesDateSource } from './series-date.mjs?v=1.1.7-date3';
 import { createRenderer } from './renderer.mjs?v=1.2.0-readable1';
@@ -168,7 +169,7 @@ function updateButtons() {
     loading = state.loading.size > 0,
     ready = both && !!state.bOnA && !state.resampleBusy && !state.manualDragging;
   $('registerBtn').disabled = !both || loading || state.manualDragging;
-  $('metric').disabled = !!state.regWorker;
+  $('differentModalities').disabled = !!state.regWorker;
   $('manualMode').disabled = !ready || loading || !!state.regWorker;
   $('exportPng').disabled = !ready || loading || !!state.regWorker;
   $('exportTransform').disabled = !ready || loading || !!state.regWorker;
@@ -639,7 +640,12 @@ function startRegistration() {
     stopRegistration();
     toast(e.message || 'Ошибка вычисления.', true);
   };
-  worker.postMessage({ a: state.a, b: state.b, method: $('metric').value, initial: state.params });
+  worker.postMessage({
+    a: state.a,
+    b: state.b,
+    method: registrationMethodFromModality($('differentModalities').checked),
+    initial: state.params
+  });
 }
 function stopRegistration(announce = true) {
   state.regWorker?.terminate();
@@ -807,7 +813,7 @@ $('manualMode').addEventListener('change', () => {
   canvases.r.parentElement.classList.toggle('manual-active', $('manualMode').checked);
   updateButtons();
 });
-$('metric').addEventListener('change', () => {
+$('differentModalities').addEventListener('change', () => {
   setRegistrationStage('metric');
   $('registrationReport').hidden = true;
 });

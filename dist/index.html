@@ -17,7 +17,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2355dec3'/%3E%3Cpath d='M8 16h16' stroke='%230e1418' stroke-width='3'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="./style.css?v=1.2.0-readable1" />
-    <link rel="stylesheet" href="./viewer-layout.css?v=1.2.0-readable1" />
+    <link rel="stylesheet" href="./viewer-layout.css?v=1.2.1-modality1" />
   </head>
   <body>
     <svg class="icon-defs" aria-hidden="true">
@@ -84,11 +84,6 @@
             Совмещение
             <span class="tiny-label">RIGID · 6 DOF</span>
           </h2>
-          <label class="field-label" for="metric">Метрика корегистрации</label>
-          <select id="metric">
-            <option value="ncc">NCC · похожий контраст</option>
-            <option value="mi">MI · разный контраст</option>
-          </select>
           <div class="reg-status" id="regStatus">
             <span class="status-dot"></span>
             <span>Корегистрация пока не выполнялась</span>
@@ -347,14 +342,20 @@
                 <svg><use href="#i-cross" /></svg>
                 Корегистрировать
               </button>
-              <span class="viewport-subtitle accent-text">Результат</span>
-              <label class="overlay-lut" id="overlayLutControl" hidden>
-                LUT
-                <select id="overlayLut" aria-label="LUT наложения">
-                  <option value="boojum">Boojum</option>
-                  <option value="gray">Ч/Б · сетка B</option>
-                </select>
+              <label class="modality-toggle" title="Использовать метрику MI вместо NCC">
+                <input id="differentModalities" type="checkbox" />
+                Разные модальности
               </label>
+              <div class="result-heading-meta">
+                <span class="viewport-subtitle accent-text">Результат</span>
+                <label class="overlay-lut" id="overlayLutControl" hidden>
+                  LUT
+                  <select id="overlayLut" aria-label="LUT наложения">
+                    <option value="boojum">Boojum</option>
+                    <option value="gray">Ч/Б · сетка B</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div class="manual-toolbar">
               <label class="manual-toggle">
@@ -625,6 +626,6 @@
     </dialog>
     <input type="file" id="fileInput" multiple hidden />
     <input type="file" id="folderInput" webkitdirectory multiple hidden />
-    <script type="module" src="./app.mjs?v=1.2.0-readable1"></script>
+    <script type="module" src="./app.mjs?v=1.2.1-modality1"></script>
   </body>
 </html>

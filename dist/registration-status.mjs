@@ -4,6 +4,8 @@ const text = {
   stale: 'Корегистрация с текущими параметрами не выполнялась. Нажми «Корегистрировать»',
   manual: 'Серия B смещена вручную'
 };
+export const registrationMethodFromModality = differentModalities =>
+  differentModalities ? 'mi' : 'ncc';
 export function registrationStatusText(state) {
   return text[state];
 }

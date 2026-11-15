@@ -8,6 +8,30 @@ import {
 import { translate } from '../dist/localization.mjs';
 import { readFileSync } from 'node:fs';
 import { compactSource } from './source-assertions.mjs';
+import * as registrationStatus from '../dist/registration-status.mjs';
+
+test('different modalities checkbox in the result viewer selects the registration metric', () => {
+  const html = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
+  const result = html.match(
+    /<section class="viewport result-viewport"[^>]*>([\s\S]*?)<\/section>/
+  )?.[1];
+  assert.ok(result);
+  const heading = result.match(/<div class="viewport-title">([\s\S]*?)<\/div>/)?.[1];
+  assert.match(heading, /id="registerBtn"/);
+  assert.match(
+    heading,
+    /<label[^>]*>[\s\S]*?<input id="differentModalities" type="checkbox"[^>]*\/>[\s\S]*?Разные модальности[\s\S]*?<\/label>/
+  );
+  assert.doesNotMatch(html, /id="metric"/);
+  assert.equal(registrationStatus.registrationMethodFromModality(false), 'ncc');
+  assert.equal(registrationStatus.registrationMethodFromModality(true), 'mi');
+  const app = compactSource(readFileSync(new URL('../dist/app.mjs', import.meta.url), 'utf8'));
+  assert.match(app, /registrationMethodFromModality\(\$\('differentModalities'\)\.checked\)/);
+  assert.match(
+    app,
+    /\$\('differentModalities'\)\.addEventListener\('change',[\s\S]*?setRegistrationStage\('metric'\)/
+  );
+});
 
 test('initial or replaced series have not been registered', () => {
   assert.equal(
@@ -53,7 +77,7 @@ test('UI routes metric changes, manual adjustment, completed runs and series rep
   const app = compactSource(readFileSync(new URL('../dist/app.mjs', import.meta.url), 'utf8'));
   assert.match(
     app,
-    /\$\('metric'\)\.addEventListener\('change',[\s\S]*?setRegistrationStage\('metric'\)/
+    /\$\('differentModalities'\)\.addEventListener\('change',[\s\S]*?setRegistrationStage\('metric'\)/
   );
   assert.match(app, /function invalidateRegistration\(\)[\s\S]*?setRegistrationStage\('manual'\)/);
   assert.match(app, /data\.type==='done'[\s\S]*?setRegistrationStage\('success'/);
