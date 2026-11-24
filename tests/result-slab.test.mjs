@@ -60,7 +60,15 @@ test('registration and manual controls share left and middle grid columns', () =
   );
   assert.match(
     css,
-    /@container result-viewer\(max-width:510px\)\{[\s\S]*?\.modality-toggle\{grid-column:2;grid-row:2/
+    /@container result-viewer\(max-width:510px\)\{\.result-viewport \.viewport-title:has\(\.overlay-lut:not\(\[hidden\]\)\)\{height:75px;[^}]*\}\.result-viewport \.viewport-title:has\(\.overlay-lut:not\(\[hidden\]\)\)\.modality-toggle\{grid-column:2;grid-row:2/
+  );
+  assert.doesNotMatch(
+    css,
+    /@container result-viewer\(max-width:510px\)\{\.result-viewport \.viewport-title\{height:75px/
+  );
+  assert.match(
+    css,
+    /@container result-viewer\(max-width:370px\)\{[\s\S]*?\.result-viewport \.viewport-title:has\(\.overlay-lut:not\(\[hidden\]\)\)\.modality-toggle\{grid-column:1 \/ -1;grid-row:2/
   );
 });
 test('result-only slab is selectable in three modes and does not change NIfTI or registration', () => {
